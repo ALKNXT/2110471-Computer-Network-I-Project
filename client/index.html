@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="theme-color"
+      content="#111112"
+    />
+    <title>Blackout — Socket Chat</title>
+    <link rel="stylesheet" href="/style.css?v=2" />
+  </head>
+
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Blackout Chat home">
+          <span class="brand-mark" aria-hidden="true">B</span>
+          <span class="brand-name">BLACKOUT<span>CHAT</span></span>
+        </a>
+
+        <div class="connection-pill">
+          <span id="connection-indicator" class="connection-indicator"></span>
+          <span id="connection-status">Connecting...</span>
+        </div>
+      </header>
+
+      <section class="hero">
+        <p class="eyebrow">REAL-TIME MESSAGING</p>
+        <h1>Stay in the <span>conversation.</span></h1>
+        <p class="hero-copy">
+          A simple socket-powered chat for people on the same network.
+        </p>
+      </section>
+
+      <section class="register-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">YOUR PROFILE</p>
+            <h2>Join the chat</h2>
+          </div>
+          <span class="step-label">01 / CONNECT</span>
+        </div>
+
+        <form id="register-form">
+          <label for="name-input">Display name</label>
+          <div class="input-row">
+            <input
+              id="name-input"
+              type="text"
+              maxlength="32"
+              placeholder="Enter your name"
+              autocomplete="nickname"
+              required
+            />
+            <button id="register-button" class="button button-primary" type="submit" disabled>
+              <span>Join chat</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </form>
+
+        <p id="register-status" class="feedback">
+          Connect to the server, then choose a display name.
+        </p>
+      </section>
+
+      <section class="chat-layout">
+        <aside class="users-card">
+          <div class="section-heading compact-heading">
+            <div>
+              <p class="eyebrow">THE ROOM</p>
+              <h2>Online now</h2>
+            </div>
+            <span id="user-count" class="count-badge">0</span>
+          </div>
+
+          <p class="users-caption">People connected to this chat</p>
+          <ul id="users-list" class="users-list">
+            <li class="empty-users">No one is here yet.</li>
+          </ul>
+
+          <div class="network-note">
+            <span class="note-dot"></span>
+            <span>Connected through WebSocket</span>
+          </div>
+        </aside>
+
+        <section class="chat-card">
+          <div class="chat-header">
+            <div class="room-icon" aria-hidden="true">#</div>
+            <div>
+              <p class="eyebrow">PUBLIC CHANNEL</p>
+              <h2>General chat</h2>
+            </div>
+            <span class="live-label"><span></span> LIVE</span>
+          </div>
+
+          <ol id="messages" class="messages" aria-live="polite">
+            <li id="empty-messages" class="empty-messages">
+              <span class="empty-message-icon" aria-hidden="true">✦</span>
+              <strong>Your conversation starts here.</strong>
+              <span>Send a message to everyone in the room.</span>
+            </li>
+          </ol>
+
+          <form id="chat-form" class="composer">
+            <label class="visually-hidden" for="message-input">Message</label>
+            <input
+              id="message-input"
+              type="text"
+              maxlength="2000"
+              placeholder="Write a message..."
+              autocomplete="off"
+              disabled
+              required
+            />
+            <button
+              id="send-button"
+              class="button button-send"
+              type="submit"
+              aria-label="Send message"
+              disabled
+            >
+              <span>Send</span>
+              <span aria-hidden="true">↑</span>
+            </button>
+          </form>
+
+          <div class="chat-footer">
+            <p id="chat-status">Register to start chatting.</p>
+            <span>Messages are sent over a live socket connection.</span>
+          </div>
+        </section>
+      </section>
+
+      <footer class="page-footer">
+        <span>BLACKOUT CHAT</span>
+        <span>Built for real-time communication</span>
+      </footer>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js?v=2"></script>
+  </body>
+</html>
