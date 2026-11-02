@@ -1,8 +1,8 @@
 # Architecture: Network Socket Chat
 
-สถานะ: Draft สำหรับ Part 1 และแผนพัฒนา Part 2–3
+สถานะ: สถาปัตยกรรม Part 1 และ implementation Part 2; AI เป็นแผน Part 3
 
-อ้างอิง: Term Project: Socket Programming — Simple Chat Application หน้า 1–2 ระบบใช้ Node.js + Express + Socket.IO และมี AI สรุปบทสนทนาในกลุ่ม การเลือกเทคโนโลยีและนโยบาย session ในเอกสารเป็นการออกแบบของทีม
+อ้างอิง: Term Project: Socket Programming — Simple Chat Application หน้า 1–2 ระบบใช้ Node.js + Express + Socket.IO และวางแผนเพิ่ม AI สรุปบทสนทนาในกลุ่มใน Part 3 การเลือกเทคโนโลยีและนโยบาย session ในเอกสารเป็นการออกแบบของทีม
 
 ## 1. ขอบเขตและสถาปัตยกรรม
 
@@ -18,47 +18,47 @@ flowchart LR
     subgraph PC2["Computer 2"]
         B["Browser Client B"]
     end
-    AI["OpenAI API: GPT-5.4 mini"]
+    AI["Part 3 planned: OpenAI API"]
     A -->|"HTTP: page and assets"| S
     B -->|"HTTP: page and assets"| S
     A <-->|"Socket.IO over WebSocket"| S
     B <-->|"Socket.IO over WebSocket"| S
     S <--> D
-    S <-->|"HTTPS: group summarization"| AI
+    S -.->|"HTTPS: planned group summarization"| AI
 ```
 
-HTTP และ WebSocket ใช้ port เดียวกัน เช่น TCP 3000 ส่วน server ติดต่อ OpenAI ผ่าน HTTPS ขาออกเมื่อสมาชิกกดสรุปข้อความ
+HTTP และ WebSocket ใช้ port เดียวกัน เช่น TCP 3000 ส่วนการติดต่อ OpenAI ผ่าน HTTPS เป็นแผน Part 3 ยังไม่อยู่ในโค้ด Part 2
 
-## 2. โครงสร้างไฟล์ที่วางแผน
+## 2. โครงสร้างไฟล์
 
-จากสถานะโปรเจกต์ที่ทีมระบุ `client/` ยังไม่มี source file และ `server/index.js` ยังเป็น placeholder โครงสร้างด้านล่างเป็นเป้าหมายสำหรับพัฒนา:
+ไฟล์ client และ server รองรับ Part 2 แล้ว ส่วนไฟล์ที่ระบุ Part 3 ยังเป็นแผนพัฒนา:
 
 ```text
 client/
-  index.html       # วางแผน: หน้าเข้าใช้ รายชื่อ และห้องแชต
-  app.js           # วางแผน: Socket.IO client และการแสดงข้อความ
-  styles.css       # วางแผน: รูปแบบหน้าจอ
+  index.html       # หน้าเข้าใช้ รายชื่อ และห้องแชต
+  app.js           # Socket.IO client และการแสดงข้อความ
+  style.css        # รูปแบบหน้าจอ
 server/
-  index.js         # มี placeholder: จะเพิ่ม Express, Socket.IO และ handlers
-  state.js         # วางแผน: users, groups, groupMessages
-  ai.js            # วางแผน: เรียก OpenAI API และจัดการข้อผิดพลาด
-.env.example      # วางแผน: ชื่อ environment variables พร้อม placeholder เท่านั้น
+  index.js         # Express, Socket.IO และ handlers สำหรับ Part 2
+  state.js         # users, groups, groupMessages
+  ai.js            # แผน Part 3: เรียก OpenAI API และจัดการข้อผิดพลาด
+.env.example      # แผน Part 3: ชื่อ environment variables พร้อม placeholder เท่านั้น
 ARCHITECTURE.md    # เอกสารสถาปัตยกรรม ใช้ชื่อนี้ทุกจุดในโปรเจกต์
 ```
 
-Client รัน `client/app.js` ใน browser และ server รัน `server/index.js` ด้วย Node.js จึงแยกไฟล์และ process ตามโจทย์ สำหรับขนาดงานนี้ handlers อยู่ใน `server/index.js` และแยกเฉพาะ state กับการเรียก AI ออกเป็นโมดูล
+Client รัน `client/app.js` ใน browser และ server รัน `server/index.js` ด้วย Node.js จึงแยกไฟล์และ process ตามโจทย์ สำหรับขนาดงานนี้ handlers อยู่ใน `server/index.js` และแยก state ออกเป็นโมดูล ส่วนโมดูล AI จะเพิ่มใน Part 3
 
 ให้ Express ให้บริการไฟล์ใน `client/` และโหลด browser bundle ของ Socket.IO จาก `/socket.io/socket.io.js` ก่อน `app.js` ใน `client/index.html` เพื่อให้ `io()` พร้อมใช้ โดย Socket.IO server ให้บริการ client bundle ได้ตามค่าเริ่มต้น หากเปลี่ยนไปใช้ bundler และ `import` client library ให้ติดตั้ง `socket.io-client` แยกใน dependencies ตามแนวทางที่เลือก.
 
 ## 3. โปรโตคอลและความสัมพันธ์กับ R2
 
-| โปรโตคอล/ชั้นการสื่อสาร | เหตุผลที่เลือก | การใช้ในระบบ |
-|---|---|---|
-| HTTP | Browser โหลดหน้าเว็บได้โดยตรง | Express ให้บริการ HTML/CSS/JavaScript และเริ่ม WebSocket handshake |
-| Socket.IO / Engine.IO | รองรับ events, acknowledgements และ rooms | รับคำขอ ส่งข้อความ และแจ้งการเปลี่ยนแปลงรายชื่อ |
-| WebSocket | สื่อสารสองทางผ่าน connection ต่อเนื่อง | เป็น transport เดียวของ Socket.IO สำหรับ browser–server |
-| TCP/IP | ส่งข้อมูลตามลำดับและระบุ host/port | รองรับ WebSocket บน LAN IP ของ server ที่ port 3000 |
-| HTTPS/TLS | เข้ารหัสการติดต่อบริการภายนอก | Server เรียก OpenAI API; หาก deploy เว็บสาธารณะใช้ HTTPS/WSS ด้วย |
+| โปรโตคอล/ชั้นการสื่อสาร | เหตุผลที่เลือก                            | การใช้ในระบบ                                                       |
+| ----------------------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| HTTP                    | Browser โหลดหน้าเว็บได้โดยตรง             | Express ให้บริการ HTML/CSS/JavaScript และเริ่ม WebSocket handshake |
+| Socket.IO / Engine.IO   | รองรับ events, acknowledgements และ rooms | รับคำขอ ส่งข้อความ และแจ้งการเปลี่ยนแปลงรายชื่อ                    |
+| WebSocket               | สื่อสารสองทางผ่าน connection ต่อเนื่อง    | เป็น transport เดียวของ Socket.IO สำหรับ browser–server            |
+| TCP/IP                  | ส่งข้อมูลตามลำดับและระบุ host/port        | รองรับ WebSocket บน LAN IP ของ server ที่ port 3000                |
+| HTTPS/TLS               | เข้ารหัสการติดต่อบริการภายนอก             | Server เรียก OpenAI API; หาก deploy เว็บสาธารณะใช้ HTTPS/WSS ด้วย  |
 
 กำหนด transport ทั้งสองฝั่งตาม [client options](https://socket.io/docs/v4/client-options/#transports) และ [server options](https://socket.io/docs/v4/server-options/#transports):
 
@@ -72,18 +72,18 @@ const socket = io({ transports: ["websocket"] });
 
 การตั้งค่านี้ปิด HTTP long-polling ถ้า WebSocket เชื่อมไม่ได้ ระบบแสดงข้อผิดพลาดและปิดการส่งข้อความ ข้อความแชตระหว่าง browser กับ server ส่งผ่าน Socket.IO เท่านั้น ไม่มี REST endpoint สำหรับส่งหรือดึงข้อความ
 
-**R2 ยังต้องยืนยันกับอาจารย์ก่อนล็อกสถาปัตยกรรม:** PDF ยก Socket.IO และ WebSocket เป็นตัวอย่าง ทีมจึงตีความว่าใช้แนวทางนี้ได้ แต่ Socket.IO มี protocol ของตัวเองเหนือ WebSocket ไม่ใช่ raw WebSocket หรือ raw TCP API การปิด polling ไม่ได้เปลี่ยนข้อแตกต่างนี้ อ้างอิง [What Socket.IO is not](https://socket.io/docs/v4/#what-socketio-is-not) หากผู้สอนกำหนดให้ใช้ raw TCP ทีมต้องปรับ client และ server ก่อนเริ่ม implementation
+**การตีความ R2 จาก PDF:** PDF ยก Socket.IO และ WebSocket เป็นตัวอย่าง ทีมจึงตีความว่าใช้แนวทางนี้ได้ แต่ Socket.IO มี protocol ของตัวเองเหนือ WebSocket ไม่ใช่ raw WebSocket หรือ raw TCP API การปิด polling ไม่ได้เปลี่ยนข้อแตกต่างนี้ อ้างอิง [What Socket.IO is not](https://socket.io/docs/v4/#what-socketio-is-not) หากผู้สอนกำหนดให้ใช้ raw TCP ทีมต้องปรับ client และ server ก่อนเริ่ม implementation
 
-การเรียก AI ผ่าน HTTPS เป็นช่องทาง server–บริการ AI ส่วนคำขอสรุปและผลสรุประหว่าง browser–server ยังคงผ่าน Socket.IO ทีมจะอธิบายขอบเขตนี้เมื่อยืนยัน R2
+การเรียก AI ผ่าน HTTPS เป็นช่องทาง server–บริการ AI ส่วนคำขอสรุปและผลสรุประหว่าง browser–server ยังคงผ่าน Socket.IO การเชื่อมต่อ AI นี้เป็นแผน Part 3
 
 ## 4. ตัวตน ข้อมูล และอายุของ session
 
 ใช้ `socket.id` เป็นตัวตนของ session และเก็บ state หลักเพียงสามชุดใน server process เดียว:
 
-| State | โครงสร้างและหน้าที่ |
-|---|---|
-| `users` | `Map<socketId, name>` เก็บผู้ใช้ที่ลงทะเบียนและยังเชื่อมต่อ |
-| `groups` | `Map<groupId, {name, members: Set<socketId>}>` เก็บกลุ่มและสมาชิกที่เชื่อมต่ออยู่ |
+| State           | โครงสร้างและหน้าที่                                                                     |
+| --------------- | --------------------------------------------------------------------------------------- |
+| `users`         | `Map<socketId, name>` เก็บผู้ใช้ที่ลงทะเบียนและยังเชื่อมต่อ                             |
+| `groups`        | `Map<groupId, {name, members: Set<socketId>}>` เก็บกลุ่มและสมาชิกที่เชื่อมต่ออยู่       |
 | `groupMessages` | `Map<groupId, Message[]>` เก็บข้อความกลุ่มล่าสุดไม่เกิน 100 ข้อความ สำหรับประวัติและ AI |
 
 `Message` มี `{from: {socketId, name}, text, sentAt}` ชื่อผู้ส่งและเวลาสร้างโดย server เมื่อรับข้อความ ส่วน `groupId` สร้างโดย server เช่น `crypto.randomUUID()` ข้อมูลทั้งหมดหายเมื่อ server restart
@@ -100,7 +100,7 @@ const socket = io({ transports: ["websocket"] });
 
 ### 5.1 รายชื่อและ UI
 
-ลงทะเบียนสำเร็จแล้ว client ได้รายชื่อออนไลน์ทั้งหมด **รวมตัวเอง** และทุกกลุ่มพร้อมสมาชิก แสดงชื่อตัวเองพร้อมคำว่า “คุณ” ส่วนการเปิดห้องส่วนตัวเลือกผู้ใช้อื่นจากรายชื่อ
+ลงทะเบียนสำเร็จแล้ว client ได้รายชื่อออนไลน์ทั้งหมด **รวมตัวเอง** และทุกกลุ่มพร้อมสมาชิก แสดงชื่อตัวเองพร้อมคำว่า “คุณ” สามารถเลือกคนอื่นหรือตัวเองเพื่อเปิดห้องส่วนตัวจากรายชื่อ
 
 ทุกห้องมี **chat box และปุ่มส่ง** กับ **chat window** ที่แสดงทั้งข้อความขาออกและขาเข้า แสดงเป็น tab หรือ panel ได้ Client เก็บประวัติในหน่วยความจำแยกตามห้อง และแสดงข้อความเป็น plain text ห้องที่ยังไม่ถูกเปิดต้องรับข้อความเก็บไว้ได้โดยไม่ปนกับห้องปัจจุบัน
 
@@ -124,23 +124,23 @@ Socket.IO room ใช้ routing ฝั่ง server ส่วนห้องต
 
 Client ส่ง request พร้อม ack callback Server ตอบ callback **ครั้งเดียว** ด้วย `{ok: true, data: ...}` หรือ `{ok: false, error: {code, message}}` Ack ผูกกับการ emit ครั้งนั้น จึงไม่ต้องมีรหัส request เพิ่ม และไม่ส่ง event ตอบกลับอีกชุด อ้างอิง [Acknowledgements](https://socket.io/docs/v4/emitting-events/#acknowledgements)
 
-| Request: Client → Server | Payload | `data` ใน ack สำเร็จ |
-|---|---|---|
-| `user:register` | `{name}` | `{self, users, groups}` |
-| `private:send` | `{to, text}` | ไม่มีข้อมูลเพิ่ม |
-| `group:create` | `{name}` | `{group, messages: []}` |
-| `group:join` | `{groupId}` | `{group, messages}` ประวัติล่าสุดของกลุ่ม |
-| `group:send` | `{groupId, text}` | ไม่มีข้อมูลเพิ่ม |
-| `ai:summarize` | `{groupId}` | `{groupId, summary}` |
+| Request: Client → Server    | Payload           | `data` ใน ack สำเร็จ                      |
+| --------------------------- | ----------------- | ----------------------------------------- |
+| `user:register`             | `{name}`          | `{self, users, groups}`                   |
+| `private:send`              | `{to, text}`      | ไม่มีข้อมูลเพิ่ม                          |
+| `group:create`              | `{name}`          | `{group, messages: []}`                   |
+| `group:join`                | `{groupId}`       | `{group, messages}` ประวัติล่าสุดของกลุ่ม |
+| `group:send`                | `{groupId, text}` | ไม่มีข้อมูลเพิ่ม                          |
+| `ai:summarize` (แผน Part 3) | `{groupId}`       | `{groupId, summary}`                      |
 
 ในข้อมูลที่ส่งออก `self`/รายการผู้ใช้เป็น `{socketId, name}` และ `group` เป็น `{groupId, name, members: [{socketId, name}]}` โดยแปลงจาก Map/Set ก่อนส่ง
 
-| Event: Server → Clients | Payload | ผู้รับ |
-|---|---|---|
-| `users:updated` | `{users}` | ผู้ใช้ที่ลงทะเบียนทั้งหมด |
-| `groups:updated` | `{groups}` | ผู้ใช้ที่ลงทะเบียนทั้งหมด |
-| `private:message` | `{from, to, text, sentAt}` | ผู้ส่งและผู้รับเท่านั้น |
-| `group:message` | `{groupId, from, text, sentAt}` | สมาชิกกลุ่มรวมผู้ส่ง |
+| Event: Server → Clients | Payload                         | ผู้รับ                    |
+| ----------------------- | ------------------------------- | ------------------------- |
+| `users:updated`         | `{users}`                       | ผู้ใช้ที่ลงทะเบียนทั้งหมด |
+| `groups:updated`        | `{groups}`                      | ผู้ใช้ที่ลงทะเบียนทั้งหมด |
+| `private:message`       | `{from, to, text, sentAt}`      | ผู้ส่งและผู้รับเท่านั้น   |
+| `group:message`         | `{groupId, from, text, sentAt}` | สมาชิกกลุ่มรวมผู้ส่ง      |
 
 **กติกาป้องกันการแสดงซ้ำ:** Client เพิ่มข้อความใหม่ในหน้าต่างจาก message event เท่านั้น ไม่เพิ่มจาก ack หรือก่อน server ตอบ ส่วน ack ของ register/create/join ใช้ตั้งค่า UI และ ack ของ AI ใช้แสดงสรุปในพื้นที่แยกจากข้อความแชต ประวัติจาก ack ของ join ใช้แทนรายการเดิมของห้อง ไม่ append ซ้ำ
 
@@ -148,7 +148,7 @@ Server ตรวจชนิดข้อมูล ชื่อยาว 1–32 �
 
 เมื่อ offline client ไม่ emit คำขอ เมื่อ ack timeout ให้แจ้งว่าไม่ทราบผลและไม่ retry อัตโนมัติ Ack การส่งข้อความหมายถึง server รับและส่งต่อแล้ว ไม่ใช่ยืนยันว่าผู้รับอ่านแล้ว
 
-## 7. AI feature: สรุปบทสนทนาในกลุ่ม
+## 7. แผน Part 3: AI สรุปบทสนทนาในกลุ่ม (ยังไม่ implement)
 
 ทีมเลือก **OpenAI GPT-5.4 mini รุ่น `gpt-5.4-mini-2026-03-17`** ผ่าน Responses API โดยใช้แพ็กเกจ `openai` ใน Node.js และเรียก `client.responses.create(...)` จาก `server/ai.js` ไม่ต้องติดตั้ง runtime หรือโมเดลในเครื่องเพิ่ม อ้างอิง [ข้อมูลโมเดลและ snapshot](https://developers.openai.com/api/docs/models/gpt-5.4-mini) และ [Text generation API](https://developers.openai.com/api/docs/guides/text)
 
@@ -166,22 +166,22 @@ AI นี้นับเป็นหนึ่ง feature ในแผน Part 3 
 
 ## 8. ตาราง requirement และการสาธิต
 
-| ข้อกำหนด | การออกแบบ / วิธีตรวจรับ |
-|---|---|
-| Background: client/server คนละไฟล์ | แสดง `client/app.js` กับ `server/index.js` และอธิบายว่าแต่ละไฟล์รันที่ใด |
-| R1: ≥2 clients บนคอมพิวเตอร์จริงคนละเครื่อง | ใช้ A/B คนละเครื่อง แสดงแผนภาพ IP/port และอธิบายเหตุผลของแต่ละ protocol |
-| R2: ข้อความใช้ Socket Programming เท่านั้น | ยืนยัน Socket.IO กับอาจารย์ก่อนล็อกแบบ และตรวจ WebSocket ใน Network panel |
-| R3: ชื่อไม่ซ้ำ | ทดลองชื่อว่าง ชื่อซ้ำ และชื่อที่ต่างเฉพาะตัวพิมพ์/ช่องว่างหัวท้าย |
-| R4: เห็นรายชื่อออนไลน์รวมตัวเอง | ตรวจรายชื่อบนทุก client และการอัปเดตตอนเข้า/ออก |
-| R5: แยกห้อง private/group | สลับคู่สนทนาและกลุ่ม ข้อความต้องไม่ปนห้อง |
-| R6: มี chat box และ chat window | ส่งและรับข้อความในทั้งห้องส่วนตัวและกลุ่ม |
-| R7: direct message เห็นเฉพาะคู่สนทนา | A ส่ง B แล้ว C ไม่ได้รับ event; ทดลอง self-chat ด้วยและตรวจว่า event แสดงเพียงครั้งเดียว |
-| R8: สร้างหลายกลุ่ม เริ่มมีผู้สร้างคนเดียว | A สร้างสองกลุ่ม แต่ละกลุ่มเริ่มมี A คนเดียว |
-| R9: ทุกคนเห็นทุกกลุ่มพร้อมสมาชิก | Client ที่เข้ามาทีหลังได้รายการครบจาก register ack |
-| R10: เข้ากลุ่มด้วยตนเอง | B ต้องกด join เอง A ส่ง ID ของ B มาเพิ่มไม่ได้ |
-| R11: ข้อความกลุ่มเฉพาะสมาชิก | A/B เป็นสมาชิก C ไม่เป็น; C ไม่ได้รับข้อความและส่งเข้ากลุ่มไม่ได้ |
-| Part 3: AI อย่างน้อยหนึ่ง feature | เรียกโมเดลจริง สรุปภาษาไทย ตรวจ non-member และกรณี API ล่ม |
-| Implementation Explanation | มีสไลด์อธิบาย socket, ack/events, routing, state, validation และชื่อรุ่น AI พร้อมโค้ด |
+| ข้อกำหนด                                    | การออกแบบ / วิธีตรวจรับ                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Background: client/server คนละไฟล์          | แสดง `client/app.js` กับ `server/index.js` และอธิบายว่าแต่ละไฟล์รันที่ใด                 |
+| R1: ≥2 clients บนคอมพิวเตอร์จริงคนละเครื่อง | ใช้ A/B คนละเครื่อง แสดงแผนภาพ IP/port และอธิบายเหตุผลของแต่ละ protocol                  |
+| R2: ข้อความใช้ Socket Programming เท่านั้น  | ใช้ Socket.IO ตามตัวอย่างใน PDF และตรวจ WebSocket ใน Network panel                       |
+| R3: ชื่อไม่ซ้ำ                              | ทดลองชื่อว่าง ชื่อซ้ำ และชื่อที่ต่างเฉพาะตัวพิมพ์/ช่องว่างหัวท้าย                        |
+| R4: เห็นรายชื่อออนไลน์รวมตัวเอง             | ตรวจรายชื่อบนทุก client และการอัปเดตตอนเข้า/ออก                                          |
+| R5: แยกห้อง private/group                   | สลับคู่สนทนาและกลุ่ม ข้อความต้องไม่ปนห้อง                                                |
+| R6: มี chat box และ chat window             | ส่งและรับข้อความในทั้งห้องส่วนตัวและกลุ่ม                                                |
+| R7: direct message เห็นเฉพาะคู่สนทนา        | A ส่ง B แล้ว C ไม่ได้รับ event; ทดลอง self-chat ด้วยและตรวจว่า event แสดงเพียงครั้งเดียว |
+| R8: สร้างหลายกลุ่ม เริ่มมีผู้สร้างคนเดียว   | A สร้างสองกลุ่ม แต่ละกลุ่มเริ่มมี A คนเดียว                                              |
+| R9: ทุกคนเห็นทุกกลุ่มพร้อมสมาชิก            | Client ที่เข้ามาทีหลังได้รายการครบจาก register ack                                       |
+| R10: เข้ากลุ่มด้วยตนเอง                     | B ต้องกด join เอง A ส่ง ID ของ B มาเพิ่มไม่ได้                                           |
+| R11: ข้อความกลุ่มเฉพาะสมาชิก                | A/B เป็นสมาชิก C ไม่เป็น; C ไม่ได้รับข้อความและส่งเข้ากลุ่มไม่ได้                        |
+| Part 3: AI อย่างน้อยหนึ่ง feature           | เรียกโมเดลจริง สรุปภาษาไทย ตรวจ non-member และกรณี API ล่ม                               |
+| Implementation Explanation                  | มีสไลด์อธิบาย socket, ack/events, routing, state, validation และชื่อรุ่น AI พร้อมโค้ด    |
 
 ## 9. การเตรียม demo
 
@@ -189,5 +189,5 @@ AI นี้นับเป็นหนึ่ง feature ในแผน Part 3 
 - ทั้งสองเครื่องเปิด `http://<server-LAN-IP>:3000` โดยใช้ IP จริง ไม่ใช้ `localhost` จากเครื่องอื่น
 - เพิ่มผู้ใช้ C ด้วย browser profile อีกตัวสำหรับทดสอบสิทธิ์ โดย A/B ยังอยู่คนละเครื่องจริง
 - ตรวจการหลุด/reconnect ว่ารายชื่อสมาชิกเหลือเฉพาะผู้เชื่อมต่อ และผู้กลับเข้ามาต้องลงทะเบียน/เข้ากลุ่มใหม่
-- ตรวจอินเทอร์เน็ต API key โควตาโมเดล และผลสรุปก่อนเริ่มนำเสนอ
+- สำหรับ Part 3 จึงเพิ่มการตรวจอินเทอร์เน็ต API key โควตาโมเดล และผลสรุป; Part 2 ไม่ต้องใช้ AI key
 - เตรียมสไลด์ Implementation Explanation พร้อมสาธิตและชี้โค้ดตาม requirement: Part 1 ต้องครบจึงตรวจ Part 2 และ Part 2 ต้องครบจึงตรวจ Part 3
