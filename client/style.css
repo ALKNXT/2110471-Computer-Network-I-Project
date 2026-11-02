@@ -30,7 +30,11 @@ body {
   margin: 0;
   background:
     radial-gradient(ellipse at 14% 0%, rgb(117 21 30 / 18%), transparent 34rem),
-    radial-gradient(ellipse at 100% 75%, rgb(89 18 24 / 10%), transparent 28rem),
+    radial-gradient(
+      ellipse at 100% 75%,
+      rgb(89 18 24 / 10%),
+      transparent 28rem
+    ),
     var(--bg);
   color: var(--text);
 }
@@ -161,7 +165,9 @@ button {
 .chat-card {
   border: 1px solid var(--border);
   border-radius: 15px;
-  background: linear-gradient(145deg, rgb(255 255 255 / 3%), transparent 50%), var(--surface);
+  background:
+    linear-gradient(145deg, rgb(255 255 255 / 3%), transparent 50%),
+    var(--surface);
   box-shadow: 0 18px 60px rgb(0 0 0 / 20%);
 }
 
@@ -743,4 +749,75 @@ input:focus {
   .page-footer {
     font-size: 9px;
   }
+}
+/* Part 2: separate conversations and explicit group membership. */
+.room-button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.room-button:hover,
+.room-button.is-active {
+  border-color: var(--red);
+  background: #35191d;
+}
+.room-button:focus-visible {
+  outline: 2px solid var(--red-bright);
+  outline-offset: 2px;
+}
+.room-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.groups-section {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.groups-section h2 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+.group-form {
+  display: grid;
+  gap: 8px;
+}
+.group-form label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.group-form input {
+  width: 100%;
+  padding: 10px;
+}
+.group-form button {
+  padding: 10px;
+}
+.group-item {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.group-members {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.chat-header > div:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#room-members {
+  margin-bottom: 0;
+}
+.chat-card {
+  align-self: start;
 }
