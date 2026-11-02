@@ -1,141 +1,139 @@
 const path = require("node:path");
 const http = require("node:http");
+const { randomUUID } = require("node:crypto");
 const express = require("express");
 const { Server } = require("socket.io");
+const { createState } = require("./state");
 
-const app = express();
-const httpServer = http.createServer(app);
+function createChatServer() {
+  const app = express();
+  const httpServer = http.createServer(app);
+  const io = new Server(httpServer, { transports: ["websocket"] });
+  const state = createState();
+  const { users, groups, groupMessages } = state;
+  app.use(express.static(path.join(__dirname, "..", "client")));
 
-const io = new Server(httpServer, {
-  transports: ["websocket"],
-});
-
-const PORT = 3000;
-const users = new Map();
-
-app.use(express.static(path.join(__dirname, "..", "client")));
-
-function sendUsersList() {
-  const userList = [...users.entries()].map(([socketId, name]) => ({
-    socketId,
-    name,
-  }));
-
-  for (const socketId of users.keys()) {
-    io.to(socketId).emit("users:updated", { users: userList });
+  function broadcast(event, data) {
+    for (const id of users.keys()) io.to(id).emit(event, data);
   }
-}
 
-function replyError(ack, code, message) {
-  if (typeof ack === "function") {
-    ack({ ok: false, error: { code, message } });
-  }
-}
-
-io.on("connection", (socket) => {
-  console.log(`Connected: ${socket.id}`);
-
-  socket.on("user:register", (payload, ack) => {
-    const name =
-      typeof payload?.name === "string" ? payload.name.trim() : "";
-
-    if (users.has(socket.id)) {
-      return replyError(
-        ack,
-        "ALREADY_REGISTERED",
-        "This connection has already registered a name.",
-      );
-    }
-
-    if (name.length < 1 || name.length > 32) {
-      return replyError(
-        ack,
-        "INVALID_NAME",
-        "Name must be between 1 and 32 characters.",
-      );
-    }
-
-    const nameAlreadyUsed = [...users.values()].some(
-      (existingName) => existingName.toLowerCase() === name.toLowerCase(),
-    );
-
-    if (nameAlreadyUsed) {
-      return replyError(ack, "NAME_TAKEN", "This name is already in use.");
-    }
-
-    users.set(socket.id, name);
-
-    const userList = [...users.entries()].map(([socketId, userName]) => ({
-      socketId,
-      name: userName,
-    }));
-
-    if (typeof ack === "function") {
-      ack({
-        ok: true,
-        data: {
-          self: { socketId: socket.id, name },
-          users: userList,
-        },
+  io.on("connection", (socket) => {
+    // Requests acknowledge once; message events update the chat history.
+    function handle(event, action, requireRegistration = true) {
+      socket.on(event, (payload, ack) => {
+        if (typeof ack !== "function") return;
+        const fail = (code, message) =>
+          ack({ ok: false, error: { code, message } });
+        if (requireRegistration && !users.has(socket.id)) {
+          return fail("NOT_REGISTERED", "Register a name first.");
+        }
+        action(payload ?? {}, (data = {}) => ack({ ok: true, data }), fail);
       });
     }
-
-    sendUsersList();
-    console.log(`${name} registered (${socket.id})`);
-  });
-
-  socket.on("chat:send", (payload, ack) => {
-    const senderName = users.get(socket.id);
-
-    if (!senderName) {
-      return replyError(
-        ack,
-        "NOT_REGISTERED",
-        "Register a name before sending a message.",
-      );
-    }
-
-    const text =
-      typeof payload?.text === "string" ? payload.text.trim() : "";
-
-    if (text.length < 1 || text.length > 2000) {
-      return replyError(
-        ack,
-        "INVALID_MESSAGE",
-        "Message must be between 1 and 2,000 characters.",
-      );
-    }
-
-    const message = {
-      from: {
-        socketId: socket.id,
-        name: senderName,
-      },
+    const clean = (value) => (typeof value === "string" ? value.trim() : "");
+    const validText = (value) => value.length >= 1 && value.length <= 2000;
+    const message = (text) => ({
+      from: { socketId: socket.id, name: users.get(socket.id) },
       text,
       sentAt: new Date().toISOString(),
-    };
+    });
 
-    for (const socketId of users.keys()) {
-      io.to(socketId).emit("chat:message", message);
-    }
+    handle(
+      "user:register",
+      (payload, ok, fail) => {
+        const name = clean(payload.name);
+        if (users.has(socket.id))
+          return fail("ALREADY_REGISTERED", "Already registered.");
+        if (!name || name.length > 32)
+          return fail("INVALID_NAME", "Name must be 1–32 characters.");
+        if (
+          [...users.values()].some(
+            (other) => other.toLowerCase() === name.toLowerCase(),
+          )
+        ) {
+          return fail("NAME_TAKEN", "This name is already in use.");
+        }
+        users.set(socket.id, name);
+        ok({
+          self: { socketId: socket.id, name },
+          users: state.userList(),
+          groups: state.groupList(),
+        });
+        broadcast("users:updated", { users: state.userList() });
+      },
+      false,
+    );
 
-    if (typeof ack === "function") {
-      ack({ ok: true, data: {} });
-    }
+    handle("private:send", (payload, ok, fail) => {
+      const text = clean(payload.text);
+      if (!validText(text))
+        return fail("INVALID_MESSAGE", "Message must be 1–2,000 characters.");
+      if (!users.has(payload.to))
+        return fail("USER_OFFLINE", "This user is no longer online.");
+      // Union routing emits once even when sending to yourself.
+      io.to(socket.id)
+        .to(payload.to)
+        .emit("private:message", { ...message(text), to: payload.to });
+      ok();
+    });
+
+    handle("group:create", (payload, ok, fail) => {
+      const name = clean(payload.name);
+      if (!name || name.length > 32)
+        return fail("INVALID_NAME", "Group name must be 1–32 characters.");
+      const groupId = randomUUID();
+      groups.set(groupId, { name, members: new Set([socket.id]) });
+      groupMessages.set(groupId, []);
+      socket.join(`group:${groupId}`);
+      ok({ group: state.groupData(groupId), messages: [] });
+      broadcast("groups:updated", { groups: state.groupList() });
+    });
+
+    handle("group:join", (payload, ok, fail) => {
+      const group = groups.get(payload.groupId);
+      if (!group) return fail("GROUP_NOT_FOUND", "This group does not exist.");
+      // Only the requesting socket can join; supplied member IDs are ignored.
+      group.members.add(socket.id);
+      socket.join(`group:${payload.groupId}`);
+      ok({
+        group: state.groupData(payload.groupId),
+        messages: groupMessages.get(payload.groupId),
+      });
+      broadcast("groups:updated", { groups: state.groupList() });
+    });
+
+    handle("group:send", (payload, ok, fail) => {
+      const group = groups.get(payload.groupId);
+      if (!group) return fail("GROUP_NOT_FOUND", "This group does not exist.");
+      if (!group.members.has(socket.id))
+        return fail("FORBIDDEN", "Join this group before sending messages.");
+      const text = clean(payload.text);
+      if (!validText(text))
+        return fail("INVALID_MESSAGE", "Message must be 1–2,000 characters.");
+      const data = { ...message(text), groupId: payload.groupId };
+      const history = groupMessages.get(payload.groupId);
+      history.push(data);
+      if (history.length > 100) history.shift();
+      io.to(`group:${payload.groupId}`).emit("group:message", data);
+      ok();
+    });
+
+    socket.on("disconnect", () => {
+      if (!users.delete(socket.id)) return;
+      for (const group of groups.values()) group.members.delete(socket.id);
+      broadcast("users:updated", { users: state.userList() });
+      broadcast("groups:updated", { groups: state.groupList() });
+    });
   });
+  return { httpServer, io };
+}
 
-  socket.on("disconnect", () => {
-    const oldName = users.get(socket.id);
-    users.delete(socket.id);
+if (require.main === module) {
+  const { httpServer } = createChatServer();
+  const port = Number(process.env.PORT || 3000);
+  httpServer.listen(port, "0.0.0.0", () =>
+    console.log(`Chat server listening on port ${port}`),
+  );
+}
 
-    console.log(`Disconnected: ${oldName ?? socket.id}`);
-
-    if (oldName) {
-      sendUsersList();
-    }
-  });
-});
-
-httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`Chat server listening on http://0.0.0.0:${PORT}`);
-});
+module.exports = { createChatServer };
