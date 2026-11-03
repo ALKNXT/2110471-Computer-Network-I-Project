@@ -189,7 +189,7 @@ function createChatServer() {
           },
         });
       } catch (error) {
-        const apiKey = process.env.OPENAI_API_KEY;
+        const apiKey = process.env.GEMINI_API_KEY;
         const errorMessage = String(error?.message || "Unknown error").replace(
           apiKey || /$^/,
           "[redacted]",

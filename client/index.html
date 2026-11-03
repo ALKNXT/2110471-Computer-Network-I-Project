@@ -127,8 +127,8 @@
           </div>
           <section id="summary-tools" class="summary-tools" hidden>
             <p class="summary-disclosure">
-              เมื่อกดสรุป ระบบจะส่งข้อความกลุ่มล่าสุดไม่เกิน 100 ข้อความไปให้
-              OpenAI
+              When you request a summary, the latest 100 group messages are
+              sent to Gemini.
             </p>
             <div class="summary-actions">
               <button
@@ -136,7 +136,7 @@
                 class="button button-ai"
                 type="button"
               >
-                สรุปบทสนทนา
+                Summarize conversation
               </button>
               <p id="summary-status" aria-live="polite"></p>
             </div>
@@ -149,7 +149,7 @@
             hidden
           >
             <p class="eyebrow">AI SUMMARY</p>
-            <h3>สรุปบทสนทนา</h3>
+            <h3>Conversation summary</h3>
             <p id="summary-text"></p>
           </section>
           <ol id="messages" class="messages" aria-live="polite">

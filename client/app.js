@@ -242,7 +242,7 @@ function renderGroups() {
 }
 function addMessage(message) {
   const item = document.createElement("li");
-  const isOwnMessage = message.from.socketId === socket.id;
+  const isOwnMessage =message.from.socketId === socket.id ||message.from.name === self?.name;
   item.className = isOwnMessage ? "message-item own-message" : "message-item";
 
   const avatar = document.createElement("span");
@@ -368,14 +368,14 @@ el("summary-button").addEventListener("click", async () => {
   if (room.summaryPending) return;
 
   room.summaryPending = true;
-  room.summaryStatus = "กำลังสรุปข้อความล่าสุด...";
+  room.summaryStatus = "Summarizing recent messages...";
   renderSummaryControls();
 
   try {
     const data = await request("ai:summarize", { groupId: room.id }, 25_000);
 
     room.summary = data.summary;
-    room.summaryStatus = `สรุปจาก ${data.messageCount} ข้อความล่าสุด`;
+    room.summaryStatus = `Summary of ${data.messageCount} recent messages.`;
   } catch (error) {
     room.summaryStatus = error.message;
   } finally {
