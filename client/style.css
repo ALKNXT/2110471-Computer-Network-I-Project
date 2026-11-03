@@ -193,6 +193,67 @@ button {
   letter-spacing: -0.03em;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+.summary-tools,
+.ai-summary {
+  padding: 12px 21px;
+  border-bottom: 1px solid var(--border-soft);
+  background: rgb(255 255 255 / 2%);
+}
+
+.summary-disclosure,
+#summary-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 9px;
+}
+
+.button-ai {
+  min-height: 34px;
+  padding: 0 13px;
+  border-color: rgb(239 51 64 / 30%);
+  background: rgb(239 51 64 / 10%);
+  color: #ff9298;
+}
+
+.button-ai:not(:disabled):hover {
+  background: rgb(239 51 64 / 20%);
+}
+
+.ai-summary {
+  background: linear-gradient(120deg, rgb(239 51 64 / 8%), transparent 70%);
+}
+
+.ai-summary .eyebrow {
+  margin-bottom: 4px;
+}
+
+.ai-summary h3 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+}
+
+#summary-text {
+  margin: 0;
+  color: #dedee2;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .step-label {
   padding-top: 5px;
   color: #77777e;

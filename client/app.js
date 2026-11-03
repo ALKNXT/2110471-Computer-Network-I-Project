@@ -15,14 +15,14 @@ function element(tag, className, text) {
   return node;
 }
 
-function request(event, payload) {
+function request(event, payload, timeoutMs = 5000) {
   const session = socket.id;
   return new Promise((resolve, reject) => {
     if (!socket.connected)
       return reject(
         new Error("Disconnected. Register again after reconnecting."),
       );
-    socket.timeout(5000).emit(event, payload, (err, result) => {
+    socket.timeout(timeoutMs).emit(event, payload, (err, result) => {
       if (!socket.connected || socket.id !== session)
         return reject(new Error("Your session ended. Register again."));
       if (err)
@@ -51,6 +51,9 @@ function ensureRoom(type, id, name) {
       draft: "",
       pending: false,
       status: "",
+      summary: "",
+      summaryStatus: "",
+      summaryPending: false,
     });
   return rooms.get(key);
 }
@@ -66,6 +69,19 @@ function canSend(room) {
       );
 }
 
+function renderSummaryControls() {
+  const room = rooms.get(activeRoom);
+  const isGroup = room?.type === "group";
+
+  el("summary-tools").hidden = !isGroup;
+  el("summary-button").disabled =
+    !isGroup || !canSend(room) || room.summaryPending;
+  el("summary-status").textContent = room?.summaryStatus || "";
+
+  el("summary-panel").hidden = !isGroup || !room.summary;
+  el("summary-text").textContent = room?.summary || "";
+}
+
 function renderComposer() {
   const room = rooms.get(activeRoom);
   el("message-input").disabled = !canSend(room) || room.pending;
@@ -78,6 +94,7 @@ function renderComposer() {
         ? "This user is offline."
         : room.status ||
           "Only people in this conversation receive your messages.";
+  renderSummaryControls();
 }
 
 function renderRoomList() {
@@ -225,7 +242,7 @@ function renderGroups() {
 }
 function addMessage(message) {
   const item = document.createElement("li");
-  const isOwnMessage = message.from.socketId === socket.id;
+  const isOwnMessage =message.from.socketId === socket.id ||message.from.name === self?.name;
   item.className = isOwnMessage ? "message-item own-message" : "message-item";
 
   const avatar = document.createElement("span");
@@ -342,6 +359,29 @@ el("create-group-form").addEventListener("submit", async (event) => {
     if (socket.id === session) el("group-status").textContent = error.message;
   } finally {
     el("create-group-button").disabled = !self || !socket.connected;
+  }
+});
+
+el("summary-button").addEventListener("click", async () => {
+  const room = rooms.get(activeRoom);
+  if (!room || room.type !== "group" || !canSend(room)) return;
+  if (room.summaryPending) return;
+
+  room.summaryPending = true;
+  room.summaryStatus = "Summarizing recent messages...";
+  renderSummaryControls();
+
+  try {
+    const data = await request("ai:summarize", { groupId: room.id }, 25_000);
+
+    room.summary = data.summary;
+    room.summaryStatus = `Summary of ${data.messageCount} recent messages.`;
+  } catch (error) {
+    room.summaryStatus = error.message;
+  } finally {
+    room.summaryPending = false;
+    if (rooms.get(activeRoom) === room) renderActiveRoom();
+    else renderSummaryControls();
   }
 });
 

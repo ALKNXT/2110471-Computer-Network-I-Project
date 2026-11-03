@@ -5,11 +5,18 @@ const express = require("express");
 const { Server } = require("socket.io");
 const { createState } = require("./state");
 
+require("dotenv").config({
+  path: path.join(__dirname, "..", ".env"),
+});
+
+const { summarizeMessages } = require("./ai");
+
 function createChatServer() {
   const app = express();
   const httpServer = http.createServer(app);
   const io = new Server(httpServer, { transports: ["websocket"] });
   const state = createState();
+  const pendingSummaries = new Set();
   const { users, groups, groupMessages } = state;
   app.use(express.static(path.join(__dirname, "..", "client")));
 
@@ -123,6 +130,81 @@ function createChatServer() {
       for (const group of groups.values()) group.members.delete(socket.id);
       broadcast("users:updated", { users: state.userList() });
       broadcast("groups:updated", { groups: state.groupList() });
+      pendingSummaries.delete(socket.id);
+    });
+
+    socket.on("ai:summarize", async (payload = {}, ack) => {
+      if (typeof ack !== "function") return;
+
+      const fail = (code, message) =>
+        ack({ ok: false, error: { code, message } });
+
+      if (!users.has(socket.id)) {
+        return fail("NOT_REGISTERED", "Register a name first.");
+      }
+
+      const groupId = payload?.groupId;
+      const group = groups.get(groupId);
+
+      if (!group) {
+        return fail("GROUP_NOT_FOUND", "This group does not exist.");
+      }
+
+      if (!group.members.has(socket.id)) {
+        return fail(
+          "FORBIDDEN",
+          "Join this group before requesting a summary.",
+        );
+      }
+
+      if (pendingSummaries.has(socket.id)) {
+        return fail("AI_BUSY", "A summary request is already in progress.");
+      }
+
+      const messages = (groupMessages.get(groupId) || []).slice(-100);
+      if (messages.length === 0) {
+        return fail("NO_MESSAGES", "There are no group messages to summarize.");
+      }
+
+      pendingSummaries.add(socket.id);
+
+      try {
+        const summary = await summarizeMessages(messages);
+
+        // ตรวจสิทธิ์อีกครั้งหลังรอ AI ป้องกันกรณีสมาชิกหลุดระหว่างประมวลผล
+        if (
+          !socket.connected ||
+          !users.has(socket.id) ||
+          !groups.get(groupId)?.members.has(socket.id)
+        ) {
+          return;
+        }
+
+        ack({
+          ok: true,
+          data: {
+            groupId,
+            messageCount: messages.length,
+            summary,
+          },
+        });
+      } catch (error) {
+        const apiKey = process.env.GEMINI_API_KEY;
+        const errorMessage = String(error?.message || "Unknown error").replace(
+          apiKey || /$^/,
+          "[redacted]",
+        );
+        console.error("AI summary request failed:", {
+          name: error?.name || "Error",
+          status: error?.status,
+          code: error?.code,
+          message: errorMessage,
+          requestId: error?.request_id,
+        });
+        fail("AI_UNAVAILABLE", "AI summary is unavailable. Try again later.");
+      } finally {
+        pendingSummaries.delete(socket.id);
+      }
     });
   });
   return { httpServer, io };
