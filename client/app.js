@@ -1,77 +1,229 @@
-const socket = io({
-  transports: ["websocket"],
-});
+/* global io */
+const socket = io({ transports: ["websocket"] });
+const el = (id) => document.getElementById(id);
+const messagesList = el("messages");
+let self = null;
+let users = [];
+let groups = [];
+let activeRoom = null;
+const rooms = new Map();
 
-const connectionStatus = document.querySelector("#connection-status");
-const connectionIndicator = document.querySelector("#connection-indicator");
-const registerForm = document.querySelector("#register-form");
-const nameInput = document.querySelector("#name-input");
-const registerButton = document.querySelector("#register-button");
-const registerStatus = document.querySelector("#register-status");
-const usersList = document.querySelector("#users-list");
-const userCount = document.querySelector("#user-count");
-const messagesList = document.querySelector("#messages");
-const emptyMessages = document.querySelector("#empty-messages");
-const chatForm = document.querySelector("#chat-form");
-const messageInput = document.querySelector("#message-input");
-const sendButton = document.querySelector("#send-button");
-const chatStatus = document.querySelector("#chat-status");
-
-let registered = false;
-
-function setChatEnabled(enabled) {
-  messageInput.disabled = !enabled;
-  sendButton.disabled = !enabled;
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-function setConnectionState(state, text) {
-  connectionStatus.textContent = text;
-  connectionIndicator.classList.toggle("is-connected", state === "connected");
-  connectionIndicator.classList.toggle("is-error", state === "error");
+function request(event, payload) {
+  const session = socket.id;
+  return new Promise((resolve, reject) => {
+    if (!socket.connected)
+      return reject(
+        new Error("Disconnected. Register again after reconnecting."),
+      );
+    socket.timeout(5000).emit(event, payload, (err, result) => {
+      if (!socket.connected || socket.id !== session)
+        return reject(new Error("Your session ended. Register again."));
+      if (err)
+        return reject(
+          new Error(
+            "No confirmation received. Check the conversation before trying again.",
+          ),
+        );
+      if (!result?.ok)
+        return reject(new Error(result?.error?.message || "Request failed."));
+      resolve(result.data);
+    });
+  });
 }
 
-function renderUsers(users) {
-  usersList.replaceChildren();
-  userCount.textContent = String(users.length);
+function ensureRoom(type, id, name) {
+  const key = `${type}:${id}`;
+  if (!rooms.has(key))
+    rooms.set(key, {
+      key,
+      type,
+      id,
+      name,
+      messages: [],
+      unread: 0,
+      draft: "",
+      pending: false,
+      status: "",
+    });
+  return rooms.get(key);
+}
 
-  if (users.length === 0) {
-    const emptyItem = document.createElement("li");
-    emptyItem.className = "empty-users";
-    emptyItem.textContent = "No one is here yet.";
-    usersList.append(emptyItem);
-    return;
+function canSend(room) {
+  if (!self || !socket.connected || !room) return false;
+  return room.type === "private"
+    ? users.some((user) => user.socketId === room.id)
+    : groups.some(
+        (group) =>
+          group.groupId === room.id &&
+          group.members.some((member) => member.socketId === self.socketId),
+      );
+}
+
+function renderComposer() {
+  const room = rooms.get(activeRoom);
+  el("message-input").disabled = !canSend(room) || room.pending;
+  el("send-button").disabled = !canSend(room) || room.pending;
+  el("chat-status").textContent = !self
+    ? "Register to start chatting."
+    : !room
+      ? "Choose a person or join a group."
+      : !canSend(room)
+        ? "This user is offline."
+        : room.status ||
+          "Only people in this conversation receive your messages.";
+}
+
+function renderRoomList() {
+  el("rooms-list").replaceChildren();
+  for (const room of rooms.values()) {
+    const item = element("li", "");
+    const button = element(
+      "button",
+      `room-button${activeRoom === room.key ? " is-active" : ""}`,
+      `${room.type === "group" ? "# " : ""}${room.name}${room.unread ? ` (${room.unread} new)` : ""}`,
+    );
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(activeRoom === room.key));
+    button.onclick = () => openRoom(room);
+    item.append(button);
+    el("rooms-list").append(item);
   }
+}
 
+function renderActiveRoom() {
+  const room = rooms.get(activeRoom);
+  messagesList.replaceChildren();
+  el("room-title").textContent = room?.name || "Choose a conversation";
+  el("room-type").textContent = room
+    ? room.type === "private"
+      ? "PRIVATE CHAT"
+      : "GROUP CHAT"
+    : "YOUR MESSAGES";
+  el("room-members").textContent =
+    room?.type === "group"
+      ? groups
+          .find((group) => group.groupId === room.id)
+          ?.members.map((member) => member.name)
+          .join(", ") || ""
+      : "";
+  el("message-input").value = room?.draft || "";
+  if (room?.messages.length) room.messages.forEach(addMessage);
+  else
+    messagesList.append(
+      element(
+        "li",
+        "empty-messages",
+        room
+          ? "No messages yet. Say hello."
+          : "Select a person or join a group to start chatting.",
+      ),
+    );
+  renderComposer();
+}
+
+function openRoom(room) {
+  activeRoom = room.key;
+  room.unread = 0;
+  renderRoomList();
+  renderActiveRoom();
+  if (canSend(room)) el("message-input").focus();
+}
+
+function receive(room, message) {
+  room.messages.push(message);
+  if (activeRoom === room.key) renderActiveRoom();
+  else room.unread++;
+  renderRoomList();
+}
+
+function renderUsers() {
+  el("users-list").replaceChildren();
+  el("user-count").textContent = String(users.length);
   for (const user of users) {
-    const item = document.createElement("li");
-    item.className = "user-item";
-
-    const avatar = document.createElement("span");
-    avatar.className = "user-avatar";
-    avatar.textContent = (user.name.trim()[0] || "?").toUpperCase();
-
-    const name = document.createElement("span");
-    name.className = "user-name";
-    name.textContent = user.name;
-
-    item.append(avatar, name);
-
-    if (registered && user.socketId === socket.id) {
-      const youBadge = document.createElement("span");
-      youBadge.className = "you-badge";
-      youBadge.textContent = "YOU";
-      item.append(youBadge);
-    }
-
-    usersList.append(item);
+    const item = element("li", "");
+    const button = element(
+      "button",
+      "room-button",
+      user.name + (user.socketId === self?.socketId ? " (You)" : ""),
+    );
+    button.type = "button";
+    button.onclick = () =>
+      openRoom(ensureRoom("private", user.socketId, user.name));
+    item.append(button);
+    el("users-list").append(item);
   }
+  renderComposer();
 }
 
-function addMessage(message) {
-  if (emptyMessages?.isConnected) {
-    emptyMessages.remove();
-  }
+function acceptGroup(data) {
+  const index = groups.findIndex(
+    (group) => group.groupId === data.group.groupId,
+  );
+  if (index < 0) groups.push(data.group);
+  else groups[index] = data.group;
+  const room = ensureRoom("group", data.group.groupId, data.group.name);
+  room.messages = data.messages;
+  renderGroups();
+  openRoom(room);
+}
 
+function renderGroups() {
+  el("groups-list").replaceChildren();
+  for (const group of groups) {
+    const item = element("li", "group-item");
+    const title = element("strong", "", group.name);
+    const members = element(
+      "p",
+      "group-members",
+      `Members: ${group.members.map((member) => member.name).join(", ") || "None online"}`,
+    );
+    const joined = group.members.some(
+      (member) => member.socketId === self?.socketId,
+    );
+    const button = element(
+      "button",
+      "room-button",
+      joined ? "Open group" : "Join group",
+    );
+    button.type = "button";
+    button.disabled = !self;
+    button.onclick = async () => {
+      if (joined)
+        return openRoom(ensureRoom("group", group.groupId, group.name));
+      button.disabled = true;
+      const session = socket.id;
+      try {
+        acceptGroup(await request("group:join", { groupId: group.groupId }));
+      } catch (error) {
+        if (socket.id === session)
+          el("group-status").textContent = error.message;
+      } finally {
+        if (socket.id === session) renderGroups();
+      }
+    };
+    item.append(title, members, button);
+    el("groups-list").append(item);
+  }
+  if (!groups.length)
+    el("groups-list").append(element("li", "empty-users", "No groups yet."));
+  const room = rooms.get(activeRoom);
+  el("room-members").textContent =
+    room?.type === "group"
+      ? groups
+          .find((g) => g.groupId === room.id)
+          ?.members.map((m) => m.name)
+          .join(", ") || ""
+      : "";
+  renderComposer();
+}
+function addMessage(message) {
   const item = document.createElement("li");
   const isOwnMessage = message.from.socketId === socket.id;
   item.className = isOwnMessage ? "message-item own-message" : "message-item";
@@ -110,104 +262,140 @@ function addMessage(message) {
   messagesList.scrollTop = messagesList.scrollHeight;
 }
 
+function resetSession(text) {
+  self = null;
+  users = [];
+  groups = [];
+  rooms.clear();
+  activeRoom = null;
+  el("name-input").disabled = false;
+  el("register-button").disabled = !socket.connected;
+  el("create-group-button").disabled = true;
+  el("group-name").disabled = true;
+  el("group-status").textContent = "";
+  el("register-status").textContent = text;
+  renderUsers();
+  renderGroups();
+  renderRoomList();
+  renderActiveRoom();
+}
+
+function connection(connected, text) {
+  el("connection-status").textContent = text;
+  el("connection-indicator").classList.toggle("is-connected", connected);
+  el("connection-indicator").classList.toggle("is-error", !connected);
+}
 socket.on("connect", () => {
-  setConnectionState("connected", "Connected · WebSocket");
-  registerButton.disabled = false;
-  registered = false;
-  setChatEnabled(false);
-  chatStatus.textContent = "Register to start chatting.";
-  registerStatus.textContent = "Connected. Choose a display name to join.";
+  connection(true, "Connected · WebSocket");
+  resetSession("Choose a display name to join.");
 });
-
 socket.on("disconnect", () => {
-  setConnectionState("error", "Disconnected");
-  registerButton.disabled = true;
-  registered = false;
-  usersList.replaceChildren();
-  userCount.textContent = "0";
-  setChatEnabled(false);
-  chatStatus.textContent = "Connection lost. Reconnect and register again.";
-  registerStatus.textContent = "You have been disconnected from the server.";
+  connection(false, "Disconnected");
+  resetSession(
+    "Connection lost. Register and join groups again after reconnecting.",
+  );
 });
-
 socket.on("connect_error", () => {
-  setConnectionState("error", "Connection failed");
-  registerButton.disabled = true;
-  registered = false;
-  setChatEnabled(false);
-  registerStatus.textContent =
-    "Could not connect. Check the server address and network.";
+  connection(false, "Connection failed");
+  resetSession("Could not connect. Check the server address and network.");
 });
 
-registerForm.addEventListener("submit", (event) => {
+el("register-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  const name = nameInput.value.trim();
-
-  if (!name) {
-    registerStatus.textContent = "Please enter a display name.";
-    return;
+  if (self || !socket.connected) return;
+  const session = socket.id;
+  el("register-button").disabled = true;
+  try {
+    const data = await request("user:register", {
+      name: el("name-input").value,
+    });
+    self = data.self;
+    users = data.users;
+    groups = data.groups;
+    el("name-input").disabled = true;
+    el("group-name").disabled = false;
+    el("create-group-button").disabled = false;
+    el("register-status").textContent = `Joined as ${self.name}.`;
+    renderUsers();
+    renderGroups();
+  } catch (error) {
+    if (socket.id === session)
+      el("register-status").textContent = error.message;
+  } finally {
+    el("register-button").disabled = !!self || !socket.connected;
   }
-
-  registerButton.disabled = true;
-  registerStatus.textContent = "Joining the chat...";
-
-  socket.emit("user:register", { name }, (result) => {
-    registerButton.disabled = false;
-
-    if (!result?.ok) {
-      registerStatus.textContent =
-        result?.error?.message ?? "Could not join the chat.";
-      return;
-    }
-
-    registered = true;
-    registerStatus.textContent = `You joined as ${result.data.self.name}.`;
-    chatStatus.textContent = "You are connected. Send a message to the room.";
-    setChatEnabled(true);
-    renderUsers(result.data.users);
-    messageInput.focus();
-  });
 });
 
-socket.on("users:updated", ({ users }) => {
-  renderUsers(users);
-});
-
-socket.on("chat:message", (message) => {
-  // Add new messages from the socket event only to avoid duplicates.
-  addMessage(message);
-});
-
-chatForm.addEventListener("submit", (event) => {
+el("create-group-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  if (!registered || !socket.connected) {
-    chatStatus.textContent = "Connect and register before sending a message.";
-    return;
+  if (!self || !socket.connected) return;
+  const session = socket.id;
+  el("create-group-button").disabled = true;
+  try {
+    acceptGroup(
+      await request("group:create", { name: el("group-name").value }),
+    );
+    el("group-name").value = "";
+    el("group-status").textContent =
+      "Group created. Others can choose to join.";
+  } catch (error) {
+    if (socket.id === session) el("group-status").textContent = error.message;
+  } finally {
+    el("create-group-button").disabled = !self || !socket.connected;
   }
+});
 
-  const text = messageInput.value.trim();
-
-  if (!text) {
-    return;
+socket.on("users:updated", (data) => {
+  if (self) {
+    users = data.users;
+    renderUsers();
   }
+});
+socket.on("groups:updated", (data) => {
+  if (self) {
+    groups = data.groups;
+    renderGroups();
+  }
+});
+socket.on("private:message", (message) => {
+  if (!self) return;
+  const peerId =
+    message.from.socketId === self.socketId
+      ? message.to
+      : message.from.socketId;
+  const peerName =
+    users.find((user) => user.socketId === peerId)?.name || message.from.name;
+  receive(ensureRoom("private", peerId, peerName), message);
+});
+socket.on("group:message", (message) => {
+  if (!self) return;
+  const group = groups.find((item) => item.groupId === message.groupId);
+  if (group) receive(ensureRoom("group", group.groupId, group.name), message);
+});
 
-  sendButton.disabled = true;
-  chatStatus.textContent = "Sending...";
-
-  socket.emit("chat:send", { text }, (result) => {
-    sendButton.disabled = !registered;
-
-    if (!result?.ok) {
-      chatStatus.textContent =
-        result?.error?.message ?? "Message could not be sent.";
-      return;
-    }
-
-    chatStatus.textContent = "Message delivered to the server.";
-  });
-
-  messageInput.value = "";
-  messageInput.focus();
+el("message-input").addEventListener("input", () => {
+  const room = rooms.get(activeRoom);
+  if (room) room.draft = el("message-input").value;
+});
+el("chat-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const room = rooms.get(activeRoom);
+  if (!canSend(room) || room.pending || !room.draft.trim()) return;
+  const draft = room.draft;
+  room.pending = true;
+  room.status = "Sending...";
+  renderComposer();
+  try {
+    await request(room.type === "private" ? "private:send" : "group:send", {
+      ...(room.type === "private" ? { to: room.id } : { groupId: room.id }),
+      text: draft,
+    });
+    room.draft = "";
+    room.status = "Message accepted by the server.";
+  } catch (error) {
+    room.status = error.message;
+  } finally {
+    room.pending = false;
+    if (rooms.get(activeRoom) === room) renderActiveRoom();
+  }
 });

@@ -3,12 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="theme-color"
-      content="#111112"
-    />
+    <meta name="theme-color" content="#111112" />
     <title>Blackout — Socket Chat</title>
-    <link rel="stylesheet" href="/style.css?v=2" />
+    <link rel="stylesheet" href="/style.css?v=3" />
   </head>
 
   <body>
@@ -53,7 +50,12 @@
               autocomplete="nickname"
               required
             />
-            <button id="register-button" class="button button-primary" type="submit" disabled>
+            <button
+              id="register-button"
+              class="button button-primary"
+              type="submit"
+              disabled
+            >
               <span>Join chat</span>
               <span aria-hidden="true">→</span>
             </button>
@@ -80,6 +82,33 @@
             <li class="empty-users">No one is here yet.</li>
           </ul>
 
+          <section class="groups-section" aria-labelledby="groups-heading">
+            <h2 id="groups-heading">Groups</h2>
+            <form id="create-group-form" class="group-form">
+              <label for="group-name">New group name</label>
+              <input
+                id="group-name"
+                maxlength="32"
+                required
+                disabled
+                placeholder="Name your group"
+              />
+              <button
+                id="create-group-button"
+                class="button button-primary"
+                type="submit"
+                disabled
+              >
+                Create group
+              </button>
+            </form>
+            <p id="group-status" class="feedback" aria-live="polite"></p>
+            <ul id="groups-list" class="users-list"></ul>
+          </section>
+          <section class="groups-section" aria-labelledby="rooms-heading">
+            <h2 id="rooms-heading">Conversations</h2>
+            <ul id="rooms-list" class="users-list"></ul>
+          </section>
           <div class="network-note">
             <span class="note-dot"></span>
             <span>Connected through WebSocket</span>
@@ -90,8 +119,9 @@
           <div class="chat-header">
             <div class="room-icon" aria-hidden="true">#</div>
             <div>
-              <p class="eyebrow">PUBLIC CHANNEL</p>
-              <h2>General chat</h2>
+              <p id="room-type" class="eyebrow">YOUR MESSAGES</p>
+              <h2 id="room-title">Choose a conversation</h2>
+              <p id="room-members" class="group-members"></p>
             </div>
             <span class="live-label"><span></span> LIVE</span>
           </div>
@@ -100,7 +130,7 @@
             <li id="empty-messages" class="empty-messages">
               <span class="empty-message-icon" aria-hidden="true">✦</span>
               <strong>Your conversation starts here.</strong>
-              <span>Send a message to everyone in the room.</span>
+              <span>Select a person or join a group to start chatting.</span>
             </li>
           </ol>
 
@@ -141,6 +171,6 @@
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/app.js?v=2"></script>
+    <script src="/app.js?v=3"></script>
   </body>
 </html>
