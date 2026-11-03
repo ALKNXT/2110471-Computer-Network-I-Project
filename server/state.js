@@ -2,6 +2,7 @@ function createState() {
   const users = new Map();
   const groups = new Map();
   const groupMessages = new Map();
+  const privateMessages = new Map();
   const userList = () =>
     [...users].map(([socketId, name]) => ({ socketId, name }));
   const groupData = (groupId) => {
@@ -19,6 +20,7 @@ function createState() {
     users,
     groups,
     groupMessages,
+    privateMessages,
     userList,
     groupData,
     groupList: () => [...groups.keys()].map(groupData),

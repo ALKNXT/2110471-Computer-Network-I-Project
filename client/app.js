@@ -240,10 +240,84 @@ function renderGroups() {
       : "";
   renderComposer();
 }
+const reactionEmojis = ["👍", "❤️", "😂"];
+
+function renderMessageReactions(message, container, room) {
+  container.replaceChildren();
+  const counts = element("div", "reaction-counts");
+  const picker = element("div", "reaction-picker");
+  picker.setAttribute("role", "group");
+  picker.setAttribute("aria-label", "Choose a reaction");
+  for (const emoji of reactionEmojis) {
+    const votes = (message.reactions || []).filter(
+      (vote) => vote.emoji === emoji,
+    );
+    const selected = votes.some((vote) => vote.socketId === self?.socketId);
+    function button(text, label) {
+      const node = element(
+        "button",
+        `reaction-button${selected ? " is-selected" : ""}`,
+        text,
+      );
+      node.type = "button";
+      node.disabled = !canSend(room) || message.reactionPending;
+      node.setAttribute("aria-label", label);
+      node.setAttribute("aria-pressed", String(selected));
+      node.onclick = async () => {
+        if (!canSend(room) || message.reactionPending) return;
+        message.reactionPending = true;
+        renderMessageReactions(message, container, room);
+        try {
+          await request("message:react", {
+            type: room.type,
+            ...(room.type === "group" ? { groupId: room.id } : { to: room.id }),
+            messageId: message.messageId,
+            emoji,
+          });
+        } catch (error) {
+          room.status = error.message;
+          if (rooms.get(activeRoom) === room) renderComposer();
+        } finally {
+          message.reactionPending = false;
+          renderMessageReactions(message, container, room);
+        }
+      };
+      return node;
+    }
+    if (votes.length) {
+      const badge = button(
+        `${emoji} ${votes.length}`,
+        `${emoji}: ${votes.length} reactions`,
+      );
+      badge.title = votes.map((vote) => vote.name).join(", ");
+      counts.append(badge);
+    }
+    picker.append(button(emoji, `React with ${emoji}`));
+  }
+  container.append(counts, picker);
+}
+
+socket.on("message:reactions", ({ messageId, reactions }) => {
+  for (const room of rooms.values()) {
+    const message = room.messages.find((item) => item.messageId === messageId);
+    if (!message) continue;
+    message.reactions = reactions;
+    if (room.key === activeRoom) {
+      const container = messagesList.querySelector(
+        `[data-message-id="${CSS.escape(messageId)}"] .message-reactions`,
+      );
+      if (container) renderMessageReactions(message, container, room);
+    }
+  }
+});
+
 function addMessage(message) {
   const item = document.createElement("li");
-  const isOwnMessage =message.from.socketId === socket.id ||message.from.name === self?.name;
+  const isOwnMessage =
+    message.from.socketId === socket.id || message.from.name === self?.name;
   item.className = isOwnMessage ? "message-item own-message" : "message-item";
+  item.dataset.messageId = message.messageId;
+  item.tabIndex = 0;
 
   const avatar = document.createElement("span");
   avatar.className = "message-avatar";
@@ -274,6 +348,9 @@ function addMessage(message) {
 
   meta.append(sender, time);
   content.append(meta, body);
+  const reactions = element("div", "message-reactions");
+  renderMessageReactions(message, reactions, rooms.get(activeRoom));
+  content.append(reactions);
   item.append(avatar, content);
   messagesList.append(item);
   messagesList.scrollTop = messagesList.scrollHeight;
