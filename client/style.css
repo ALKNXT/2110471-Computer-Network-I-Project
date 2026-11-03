@@ -799,6 +799,9 @@ input:focus {
 .group-form button {
   padding: 10px;
 }
+#group-status {
+  margin-bottom: 14px;
+}
 .group-item {
   padding: 10px;
   border: 1px solid var(--border);
