@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#111112" />
     <title>Blackout — Socket Chat</title>
-    <link rel="stylesheet" href="/style.css?v=3" />
+    <link rel="stylesheet" href="/style.css?v=4" />
   </head>
 
   <body>
@@ -125,7 +125,33 @@
             </div>
             <span class="live-label"><span></span> LIVE</span>
           </div>
+          <section id="summary-tools" class="summary-tools" hidden>
+            <p class="summary-disclosure">
+              เมื่อกดสรุป ระบบจะส่งข้อความกลุ่มล่าสุดไม่เกิน 100 ข้อความไปให้
+              OpenAI
+            </p>
+            <div class="summary-actions">
+              <button
+                id="summary-button"
+                class="button button-ai"
+                type="button"
+              >
+                สรุปบทสนทนา
+              </button>
+              <p id="summary-status" aria-live="polite"></p>
+            </div>
+          </section>
 
+          <section
+            id="summary-panel"
+            class="ai-summary"
+            aria-live="polite"
+            hidden
+          >
+            <p class="eyebrow">AI SUMMARY</p>
+            <h3>สรุปบทสนทนา</h3>
+            <p id="summary-text"></p>
+          </section>
           <ol id="messages" class="messages" aria-live="polite">
             <li id="empty-messages" class="empty-messages">
               <span class="empty-message-icon" aria-hidden="true">✦</span>
@@ -171,6 +197,6 @@
     </main>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/app.js?v=3"></script>
+    <script src="/app.js?v=4"></script>
   </body>
 </html>
