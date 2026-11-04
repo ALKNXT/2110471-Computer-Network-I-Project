@@ -191,3 +191,13 @@ AI นี้นับเป็นหนึ่ง feature ในแผน Part 3 
 - ตรวจการหลุด/reconnect ว่ารายชื่อสมาชิกเหลือเฉพาะผู้เชื่อมต่อ และผู้กลับเข้ามาต้องลงทะเบียน/เข้ากลุ่มใหม่
 - สำหรับ Part 3 จึงเพิ่มการตรวจอินเทอร์เน็ต API key โควตาโมเดล และผลสรุป; Part 2 ไม่ต้องใช้ AI key
 - เตรียมสไลด์ Implementation Explanation พร้อมสาธิตและชี้โค้ดตาม requirement: Part 1 ต้องครบจึงตรวจ Part 2 และ Part 2 ต้องครบจึงตรวจ Part 3
+
+## 10. Message reactions (ฟีเจอร์เพิ่มเติม)
+
+- Hover ที่ข้อความเพื่อเลือก 👍 ❤️ 😂 ใต้ข้อความ รองรับทั้ง private และ group chat หนึ่ง session เลือกได้หนึ่ง reaction ต่อข้อความ กดซ้ำเพื่อลบหรือเลือกตัวอื่นเพื่อเปลี่ยน
+- Server เพิ่ม `messageId` ที่สร้างด้วย `crypto.randomUUID()` และ `reactions: [{socketId, name, emoji}]` ในข้อความ โดยไม่เปลี่ยนการส่งข้อความ รายชื่อ หรือกติกาการเข้าร่วมกลุ่มตาม R3–R11
+- Request `message:react` ส่ง `{type, messageId, emoji, to? , groupId?}` โดย private ใช้ `to` และ group ใช้ `groupId` ตอบผลสำเร็จ/ผิดพลาดผ่าน ack เดิม
+- Event `message:reactions` ส่ง `{messageId, reactions, groupId?}` เฉพาะคู่สนทนาหรือสมาชิกกลุ่ม Client อัปเดต reaction ของข้อความเดิมโดยไม่เพิ่มข้อความใหม่
+- Server ตรวจตัวตนจาก socket และตรวจว่าข้อความอยู่ในห้องที่ผู้ร้องขอมีสิทธิ์ ไม่รับตัวตนผู้กดจาก payload และไม่ส่งข้อมูล reaction ให้ผู้ใช้อื่นนอกห้อง
+- Group ใช้ประวัติ 100 ข้อความเดิม ส่วน private เพิ่ม `privateMessages` เป็น Map จากคู่ socket IDs ไปยังข้อความล่าสุดไม่เกิน 100 ข้อความ เพื่อค้นหาและตรวจสิทธิ์ reaction เท่านั้น ไม่มี API ดาวน์โหลดประวัติ private เพิ่ม และล้าง state นี้เมื่อคู่สนทนาคนใดคนหนึ่ง disconnect
+- Reaction ของข้อความที่พ้น buffer จะถูกปฏิเสธด้วย `MESSAGE_NOT_FOUND` ส่วนข้อความที่ client แสดงอยู่ยังคงอ่านได้ตามเดิม

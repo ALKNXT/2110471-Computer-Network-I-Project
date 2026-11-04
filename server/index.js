@@ -17,7 +17,9 @@ function createChatServer() {
   const io = new Server(httpServer, { transports: ["websocket"] });
   const state = createState();
   const pendingSummaries = new Set();
-  const { users, groups, groupMessages } = state;
+  const { users, groups, groupMessages, privateMessages } = state;
+  const reactionEmojis = ["👍", "❤️", "😂"];
+  const privateKey = (a, b) => JSON.stringify([a, b].sort());
   app.use(express.static(path.join(__dirname, "..", "client")));
 
   function broadcast(event, data) {
@@ -40,9 +42,11 @@ function createChatServer() {
     const clean = (value) => (typeof value === "string" ? value.trim() : "");
     const validText = (value) => value.length >= 1 && value.length <= 2000;
     const message = (text) => ({
+      messageId: randomUUID(),
       from: { socketId: socket.id, name: users.get(socket.id) },
       text,
       sentAt: new Date().toISOString(),
+      reactions: [],
     });
 
     handle(
@@ -78,9 +82,13 @@ function createChatServer() {
       if (!users.has(payload.to))
         return fail("USER_OFFLINE", "This user is no longer online.");
       // Union routing emits once even when sending to yourself.
-      io.to(socket.id)
-        .to(payload.to)
-        .emit("private:message", { ...message(text), to: payload.to });
+      const data = { ...message(text), to: payload.to };
+      const key = privateKey(socket.id, payload.to);
+      if (!privateMessages.has(key)) privateMessages.set(key, []);
+      const history = privateMessages.get(key);
+      history.push(data);
+      if (history.length > 100) history.shift();
+      io.to(socket.id).to(payload.to).emit("private:message", data);
       ok();
     });
 
@@ -125,8 +133,69 @@ function createChatServer() {
       ok();
     });
 
+    handle("message:react", (payload, ok, fail) => {
+      if (!reactionEmojis.includes(payload.emoji)) {
+        return fail("INVALID_REACTION", "Choose 👍, ❤️ or 😂.");
+      }
+      let history;
+      let groupRoom;
+      if (payload.type === "group") {
+        const group = groups.get(payload.groupId);
+        if (!group)
+          return fail("GROUP_NOT_FOUND", "This group does not exist.");
+        if (!group.members.has(socket.id))
+          return fail("FORBIDDEN", "Join this group before reacting.");
+        history = groupMessages.get(payload.groupId);
+        groupRoom = `group:${payload.groupId}`;
+      } else if (payload.type === "private") {
+        if (!users.has(payload.to))
+          return fail("USER_OFFLINE", "This user is no longer online.");
+        history = privateMessages.get(privateKey(socket.id, payload.to));
+      } else {
+        return fail("INVALID_REACTION", "Unknown conversation type.");
+      }
+      const target = history?.find(
+        (item) => item.messageId === payload.messageId,
+      );
+      if (!target)
+        return fail(
+          "MESSAGE_NOT_FOUND",
+          "This message is no longer available for reactions.",
+        );
+      const previous = target.reactions.findIndex(
+        (item) => item.socketId === socket.id,
+      );
+      const oldEmoji = previous < 0 ? null : target.reactions[previous].emoji;
+      if (previous >= 0) target.reactions.splice(previous, 1);
+      if (oldEmoji !== payload.emoji) {
+        target.reactions.push({
+          socketId: socket.id,
+          name: users.get(socket.id),
+          emoji: payload.emoji,
+        });
+      }
+      const update = {
+        messageId: target.messageId,
+        reactions: target.reactions,
+      };
+      if (groupRoom) {
+        io.to(groupRoom).emit("message:reactions", {
+          ...update,
+          groupId: payload.groupId,
+        });
+      } else {
+        io.to(target.from.socketId)
+          .to(target.to)
+          .emit("message:reactions", update);
+      }
+      ok();
+    });
+
     socket.on("disconnect", () => {
       if (!users.delete(socket.id)) return;
+      for (const key of privateMessages.keys()) {
+        if (JSON.parse(key).includes(socket.id)) privateMessages.delete(key);
+      }
       for (const group of groups.values()) group.members.delete(socket.id);
       broadcast("users:updated", { users: state.userList() });
       broadcast("groups:updated", { groups: state.groupList() });

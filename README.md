@@ -53,3 +53,13 @@ Manual UI checklist:
 - Private messages go only to the sender and recipient. Group messages go only to members. Server-side checks enforce these rules.
 - Acknowledgements report success/errors. Only message events append new messages; there is no automatic resend on timeout.
 - AI is a Part 3 plan in `ARCHITECTURE.md`; it is not implemented or needed to run Part 2.
+
+## Message reactions
+
+Hover over a message to choose **👍**, **❤️**, or **😂** beneath it. Each connected user can have one reaction per message: click the same emoji again to remove it, or choose another to switch. Existing reaction counts remain visible; hover over a count to see the reacting names. Keyboard users can focus a message to reveal its buttons, and touch devices show the buttons directly.
+
+Reactions work in both private and group rooms. Updates are sent only to the original private participants or current group members, and the server verifies permission on every request. Group history includes saved reactions when a member joins.
+
+The server accepts reactions for the latest 100 retained messages per conversation. Private reaction state is removed when either participant disconnects; group reactions remain with retained group history until the server restarts. Reactions identify users by their current socket session, consistent with the existing membership model.
+
+`npm test` includes reaction tests for toggle/switch, counts, private/group isolation, forged actor data, invalid emoji, self-chat, history, and expired messages. To test the UI, use Alice/Bob/Carol: react to a private message and a group message, verify the other participant sees the same count, and verify Carol receives no update while outside that conversation.
