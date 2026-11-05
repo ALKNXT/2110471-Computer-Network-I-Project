@@ -328,6 +328,47 @@ socket.on("message:reactions", ({ messageId, reactions }) => {
   }
 });
 
+socket.on("message:unsent", (data) => {
+  let room;
+
+  if (data.type === "group") {
+    room = rooms.get(`group:${data.groupId}`);
+  } else {
+    const peerId =
+      data.participantIds.find((id) => id !== socket.id) || socket.id;
+    room = rooms.get(`private:${peerId}`);
+  }
+
+  if (!room) return;
+
+  // เอาข้อความที่ถูกยกเลิกออกจากข้อมูล client
+  room.messages = room.messages.filter(
+    (message) => message.messageId !== data.messageId,
+  );
+
+  // ลบเฉพาะ quote ที่อ้างถึงข้อความนี้ โดยเก็บข้อความ reply ไว้
+  for (const message of room.messages) {
+    if (message.replyTo?.messageId === data.messageId) {
+      message.replyTo = null;
+    }
+  }
+
+  // ถ้ากำลังเตรียม reply ถึงข้อความนี้ ให้ยกเลิก preview
+  if (room.replyingTo?.messageId === data.messageId) {
+    room.replyingTo = null;
+  }
+
+  // สรุปเดิมอาจมีรายละเอียดจากข้อความที่ถูกยกเลิก
+  if (room.type === "group") {
+    room.summary = "";
+    room.summaryStatus = "";
+  }
+
+  if (rooms.get(activeRoom) === room) {
+    renderActiveRoom();
+  }
+});
+
 function addMessage(message) {
   const item = document.createElement("li");
   const isOwnMessage =
@@ -381,6 +422,39 @@ function addMessage(message) {
     el("message-input").focus();
   });
 
+  let unsendButton = null;
+
+  if (message.from.socketId === socket.id) {
+    unsendButton = element("button", "unsend-button", "Unsend");
+    unsendButton.type = "button";
+
+    unsendButton.addEventListener("click", async () => {
+      const room = rooms.get(activeRoom);
+      if (!room || message.unsendPending) return;
+
+      message.unsendPending = true;
+      unsendButton.disabled = true;
+
+      try {
+        await request("message:unsend", {
+          type: room.type,
+          ...(room.type === "group" ? { groupId: room.id } : { to: room.id }),
+          messageId: message.messageId,
+        });
+      } catch (error) {
+        room.status = error.message;
+        if (rooms.get(activeRoom) === room) renderComposer();
+      } finally {
+        message.unsendPending = false;
+
+        // ถ้าส่งไม่สำเร็จ ให้ปุ่มกลับมากดได้
+        if (messagesList.contains(unsendButton)) {
+          unsendButton.disabled = false;
+        }
+      }
+    });
+  }
+
   if (message.replyTo) {
     const quote = element("button", "reply-quote");
     quote.type = "button";
@@ -406,6 +480,7 @@ function addMessage(message) {
     content.append(quote);
   }
   content.append(body, replyButton);
+  if (unsendButton) content.append(unsendButton);
   const reactions = element("div", "message-reactions");
   renderMessageReactions(message, reactions, rooms.get(activeRoom));
   content.append(reactions);
