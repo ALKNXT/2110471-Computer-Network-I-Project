@@ -20,6 +20,7 @@ function createChatServer({
   const state = createState();
   const pendingSummaries = new Set();
   const groupMessageVersions = new Map();
+  const privateMessageVersions = new Map();
   const { users, groups, groupMessages, privateMessages } = state;
   const reactionEmojis = ["👍", "❤️", "😂"];
   const privateKey = (a, b) => JSON.stringify([a, b].sort());
@@ -124,6 +125,10 @@ function createChatServer({
       };
       history.push(data);
       if (history.length > 100) history.shift();
+      privateMessageVersions.set(
+        key,
+        (privateMessageVersions.get(key) || 0) + 1,
+      );
       io.to(socket.id).to(payload.to).emit("private:message", data);
       ok();
     });
@@ -253,6 +258,12 @@ function createChatServer({
 
         io.to(groupRoom).emit("message:unsent", update);
       } else {
+        const key = privateKey(socket.id, payload.to);
+        privateMessageVersions.set(
+          key,
+          (privateMessageVersions.get(key) || 0) + 1,
+        );
+
         // Socket.IO จะส่งให้แต่ละ socket ใน union เพียงครั้งเดียว
         io.to(target.from.socketId)
           .to(target.to)
@@ -325,7 +336,10 @@ function createChatServer({
     socket.on("disconnect", () => {
       if (!users.delete(socket.id)) return;
       for (const key of privateMessages.keys()) {
-        if (JSON.parse(key).includes(socket.id)) privateMessages.delete(key);
+        if (JSON.parse(key).includes(socket.id)) {
+          privateMessages.delete(key);
+          privateMessageVersions.delete(key);
+        }
       }
       for (const group of groups.values()) group.members.delete(socket.id);
       broadcast("users:updated", { users: state.userList() });
@@ -343,17 +357,42 @@ function createChatServer({
         return fail("NOT_REGISTERED", "Register a name first.");
       }
 
-      const groupId = payload?.groupId;
-      const group = groups.get(groupId);
+      const type = payload?.type || (payload?.groupId ? "group" : undefined);
+      let groupId;
+      let privateTo;
+      let versionKey;
+      let messages;
 
-      if (!group) {
-        return fail("GROUP_NOT_FOUND", "This group does not exist.");
-      }
+      if (type === "group") {
+        groupId = payload.groupId;
+        const group = groups.get(groupId);
 
-      if (!group.members.has(socket.id)) {
+        if (!group) {
+          return fail("GROUP_NOT_FOUND", "This group does not exist.");
+        }
+
+        if (!group.members.has(socket.id)) {
+          return fail(
+            "FORBIDDEN",
+            "Join this group before requesting a summary.",
+          );
+        }
+
+        versionKey = groupId;
+        messages = (groupMessages.get(groupId) || []).slice(-100);
+      } else if (type === "private") {
+        privateTo = payload?.to;
+
+        if (!users.has(privateTo)) {
+          return fail("USER_OFFLINE", "This user is no longer online.");
+        }
+
+        versionKey = privateKey(socket.id, privateTo);
+        messages = (privateMessages.get(versionKey) || []).slice(-100);
+      } else {
         return fail(
-          "FORBIDDEN",
-          "Join this group before requesting a summary.",
+          "INVALID_CONVERSATION",
+          "Choose a private chat or group to summarize.",
         );
       }
 
@@ -361,37 +400,45 @@ function createChatServer({
         return fail("AI_BUSY", "A summary request is already in progress.");
       }
 
-      const messages = (groupMessages.get(groupId) || []).slice(-100);
       if (messages.length === 0) {
-        return fail("NO_MESSAGES", "There are no group messages to summarize.");
+        return fail(
+          "NO_MESSAGES",
+          "There are no messages in this conversation to summarize.",
+        );
       }
 
       pendingSummaries.add(socket.id);
 
       try {
-        const messageVersion = groupMessageVersions.get(groupId) || 0;
+        const getMessageVersion = () =>
+          type === "group"
+            ? groupMessageVersions.get(versionKey) || 0
+            : privateMessageVersions.get(versionKey) || 0;
+        const messageVersion = getMessageVersion();
         const summary = await summarizeMessages(messages);
 
-        // ตรวจสิทธิ์อีกครั้งหลังรอ AI ป้องกันกรณีสมาชิกหลุดระหว่างประมวลผล
-        if (
-          !socket.connected ||
-          !users.has(socket.id) ||
-          !groups.get(groupId)?.members.has(socket.id)
-        ) {
-          return;
+        // Recheck access after waiting for the AI provider.
+        if (!socket.connected || !users.has(socket.id)) return;
+
+        if (type === "group") {
+          if (!groups.get(groupId)?.members.has(socket.id)) return;
+        } else if (!users.has(privateTo)) {
+          return fail("USER_OFFLINE", "This user is no longer online.");
         }
 
-        if ((groupMessageVersions.get(groupId) || 0) !== messageVersion) {
+        if (getMessageVersion() !== messageVersion) {
           return fail(
             "SUMMARY_STALE",
-            "Group messages changed while summarizing. Please try again.",
+            "Conversation messages changed while summarizing. Please try again.",
           );
         }
 
         ack({
           ok: true,
           data: {
+            type,
             groupId,
+            to: privateTo,
             messageCount: messages.length,
             summary,
           },

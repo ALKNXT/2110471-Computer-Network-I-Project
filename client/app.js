@@ -87,14 +87,15 @@ function renderReplyPreview() {
 
 function renderSummaryControls() {
   const room = rooms.get(activeRoom);
-  const isGroup = room?.type === "group";
+  const supportsSummary =
+    room?.type === "group" || room?.type === "private";
 
-  el("summary-tools").hidden = !isGroup;
+  el("summary-tools").hidden = !supportsSummary;
   el("summary-button").disabled =
-    !isGroup || !canSend(room) || room.summaryPending;
+    !supportsSummary || !canSend(room) || room.summaryPending;
   el("summary-status").textContent = room?.summaryStatus || "";
 
-  el("summary-panel").hidden = !isGroup || !room.summary;
+  el("summary-panel").hidden = !supportsSummary || !room.summary;
   el("summary-text").textContent = room?.summary || "";
 }
 
@@ -359,10 +360,8 @@ socket.on("message:unsent", (data) => {
   }
 
   // สรุปเดิมอาจมีรายละเอียดจากข้อความที่ถูกยกเลิก
-  if (room.type === "group") {
-    room.summary = "";
-    room.summaryStatus = "";
-  }
+  room.summary = "";
+  room.summaryStatus = "";
 
   if (rooms.get(activeRoom) === room) {
     renderActiveRoom();
@@ -574,7 +573,7 @@ el("create-group-form").addEventListener("submit", async (event) => {
 
 el("summary-button").addEventListener("click", async () => {
   const room = rooms.get(activeRoom);
-  if (!room || room.type !== "group" || !canSend(room)) return;
+  if (!room || !canSend(room)) return;
   if (room.summaryPending) return;
 
   room.summaryPending = true;
@@ -582,7 +581,14 @@ el("summary-button").addEventListener("click", async () => {
   renderSummaryControls();
 
   try {
-    const data = await request("ai:summarize", { groupId: room.id }, 25_000);
+    const data = await request(
+      "ai:summarize",
+      {
+        type: room.type,
+        ...(room.type === "group" ? { groupId: room.id } : { to: room.id }),
+      },
+      25_000,
+    );
 
     room.summary = data.summary;
     room.summaryStatus = `Summary of ${data.messageCount} recent messages.`;
