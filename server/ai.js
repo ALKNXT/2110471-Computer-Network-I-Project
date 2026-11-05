@@ -47,6 +47,14 @@ async function summarizeMessages(messages) {
     sender: message.from?.name || "Unknown",
     sentAt: message.sentAt,
     text: message.text,
+    ...(message.replyTo
+      ? {
+          replyTo: {
+            sender: message.replyTo.fromName,
+            text: message.replyTo.text,
+          },
+        }
+      : {}),
   }));
 
   let summary = await generateEnglishSummary(transcript);

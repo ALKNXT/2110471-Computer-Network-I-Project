@@ -941,3 +941,75 @@ input:focus {
     visibility: visible;
   }
 }
+
+.reply-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 17px;
+  border-top: 1px solid var(--border-soft);
+  background: rgb(0 0 0 / 18%);
+}
+
+.reply-preview[hidden] {
+  display: none;
+}
+
+.reply-preview-content {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border-left: 3px solid var(--red);
+  padding-left: 9px;
+}
+
+.reply-preview-sender,
+.reply-quote-sender {
+  color: var(--red-bright);
+  font-size: 11px;
+}
+
+#reply-preview-text,
+.reply-quote-text {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-cancel-button,
+.reply-button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.reply-cancel-button {
+  font-size: 22px;
+}
+
+.reply-button {
+  align-self: flex-start;
+  padding: 2px 0;
+  font-size: 11px;
+}
+
+.reply-quote {
+  display: grid;
+  max-width: 100%;
+  gap: 3px;
+  margin: 5px 0;
+  padding: 7px 9px;
+  border: 0;
+  border-left: 3px solid var(--red);
+  background: rgb(0 0 0 / 16%);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.reply-quote-text {
+  max-width: 100%;
+}

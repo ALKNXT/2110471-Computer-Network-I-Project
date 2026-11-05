@@ -41,6 +41,32 @@ function createChatServer() {
     }
     const clean = (value) => (typeof value === "string" ? value.trim() : "");
     const validText = (value) => value.length >= 1 && value.length <= 2000;
+    const resolveReply = (history, replyToMessageId, fail) => {
+      if (replyToMessageId == null) return null;
+
+      if (
+        typeof replyToMessageId !== "string" ||
+        replyToMessageId.length === 0
+      ) {
+        fail("INVALID_REPLY", "The message to reply to is invalid.");
+        return undefined;
+      }
+
+      const original = history.find(
+        (item) => item.messageId === replyToMessageId,
+      );
+
+      if (!original) {
+        fail("MESSAGE_NOT_FOUND", "The message to reply to is unavailable.");
+        return undefined;
+      }
+
+      return {
+        messageId: original.messageId,
+        fromName: original.from.name,
+        text: original.text,
+      };
+    };
     const message = (text) => ({
       messageId: randomUUID(),
       from: { socketId: socket.id, name: users.get(socket.id) },
@@ -82,10 +108,17 @@ function createChatServer() {
       if (!users.has(payload.to))
         return fail("USER_OFFLINE", "This user is no longer online.");
       // Union routing emits once even when sending to yourself.
-      const data = { ...message(text), to: payload.to };
       const key = privateKey(socket.id, payload.to);
       if (!privateMessages.has(key)) privateMessages.set(key, []);
       const history = privateMessages.get(key);
+      const replyTo = resolveReply(history, payload.replyToMessageId, fail);
+      if (replyTo === undefined) return;
+
+      const data = {
+        ...message(text),
+        to: payload.to,
+        replyTo,
+      };
       history.push(data);
       if (history.length > 100) history.shift();
       io.to(socket.id).to(payload.to).emit("private:message", data);
@@ -125,8 +158,15 @@ function createChatServer() {
       const text = clean(payload.text);
       if (!validText(text))
         return fail("INVALID_MESSAGE", "Message must be 1–2,000 characters.");
-      const data = { ...message(text), groupId: payload.groupId };
       const history = groupMessages.get(payload.groupId);
+      const replyTo = resolveReply(history, payload.replyToMessageId, fail);
+      if (replyTo === undefined) return;
+
+      const data = {
+        ...message(text),
+        groupId: payload.groupId,
+        replyTo,
+      };
       history.push(data);
       if (history.length > 100) history.shift();
       io.to(`group:${payload.groupId}`).emit("group:message", data);

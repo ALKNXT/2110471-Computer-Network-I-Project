@@ -54,6 +54,7 @@ function ensureRoom(type, id, name) {
       summary: "",
       summaryStatus: "",
       summaryPending: false,
+      replyingTo: null,
     });
   return rooms.get(key);
 }
@@ -67,6 +68,21 @@ function canSend(room) {
           group.groupId === room.id &&
           group.members.some((member) => member.socketId === self.socketId),
       );
+}
+
+function renderReplyPreview() {
+  const room = rooms.get(activeRoom);
+  const replyTo = room?.replyingTo;
+  const preview = el("reply-preview");
+
+  preview.hidden = !replyTo;
+
+  if (!replyTo) return;
+
+  el("reply-preview-sender").textContent =
+    replyTo.from.name === self?.name ? "You" : replyTo.from.name;
+
+  el("reply-preview-text").textContent = replyTo.text;
 }
 
 function renderSummaryControls() {
@@ -95,6 +111,7 @@ function renderComposer() {
         : room.status ||
           "Only people in this conversation receive your messages.";
   renderSummaryControls();
+  renderReplyPreview();
 }
 
 function renderRoomList() {
@@ -347,7 +364,48 @@ function addMessage(message) {
   body.textContent = message.text;
 
   meta.append(sender, time);
-  content.append(meta, body);
+  content.append(meta);
+  const replyButton = element("button", "reply-button", "Reply");
+  replyButton.type = "button";
+  replyButton.addEventListener("click", () => {
+    const room = rooms.get(activeRoom);
+    if (!room) return;
+
+    room.replyingTo = {
+      messageId: message.messageId,
+      from: message.from,
+      text: message.text,
+    };
+
+    renderReplyPreview();
+    el("message-input").focus();
+  });
+
+  if (message.replyTo) {
+    const quote = element("button", "reply-quote");
+    quote.type = "button";
+    quote.setAttribute("aria-label", "Jump to replied message");
+
+    const quoteSender = element(
+      "strong",
+      "reply-quote-sender",
+      message.replyTo.fromName,
+    );
+    const quoteText = element("span", "reply-quote-text", message.replyTo.text);
+
+    quote.append(quoteSender, quoteText);
+
+    quote.addEventListener("click", () => {
+      const original = messagesList.querySelector(
+        `[data-message-id="${CSS.escape(message.replyTo.messageId)}"]`,
+      );
+
+      original?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    content.append(quote);
+  }
+  content.append(body, replyButton);
   const reactions = element("div", "message-reactions");
   renderMessageReactions(message, reactions, rooms.get(activeRoom));
   content.append(reactions);
@@ -506,8 +564,12 @@ el("chat-form").addEventListener("submit", async (event) => {
     await request(room.type === "private" ? "private:send" : "group:send", {
       ...(room.type === "private" ? { to: room.id } : { groupId: room.id }),
       text: draft,
+      ...(room.replyingTo
+        ? { replyToMessageId: room.replyingTo.messageId }
+        : {}),
     });
     room.draft = "";
+    room.replyingTo = null;
     room.status = "Message accepted by the server.";
   } catch (error) {
     room.status = error.message;
@@ -515,4 +577,11 @@ el("chat-form").addEventListener("submit", async (event) => {
     room.pending = false;
     if (rooms.get(activeRoom) === room) renderActiveRoom();
   }
+});
+el("cancel-reply-button").addEventListener("click", () => {
+  const room = rooms.get(activeRoom);
+  if (!room) return;
+
+  room.replyingTo = null;
+  renderReplyPreview();
 });
