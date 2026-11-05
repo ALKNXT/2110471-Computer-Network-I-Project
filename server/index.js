@@ -162,15 +162,17 @@ function createChatServer() {
           "MESSAGE_NOT_FOUND",
           "This message is no longer available for reactions.",
         );
+      const currentName = users.get(socket.id);
+
       const previous = target.reactions.findIndex(
-        (item) => item.socketId === socket.id,
+        (item) => item.name === currentName,
       );
+
       const oldEmoji = previous < 0 ? null : target.reactions[previous].emoji;
       if (previous >= 0) target.reactions.splice(previous, 1);
       if (oldEmoji !== payload.emoji) {
         target.reactions.push({
-          socketId: socket.id,
-          name: users.get(socket.id),
+          name: currentName,
           emoji: payload.emoji,
         });
       }

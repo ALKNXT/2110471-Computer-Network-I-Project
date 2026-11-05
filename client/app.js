@@ -252,7 +252,7 @@ function renderMessageReactions(message, container, room) {
     const votes = (message.reactions || []).filter(
       (vote) => vote.emoji === emoji,
     );
-    const selected = votes.some((vote) => vote.socketId === self?.socketId);
+    const selected = votes.some((vote) => vote.name === self?.name);
     function button(text, label) {
       const node = element(
         "button",
