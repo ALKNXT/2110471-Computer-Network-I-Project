@@ -1013,3 +1013,23 @@ input:focus {
 .reply-quote-text {
   max-width: 100%;
 }
+
+.unsend-button {
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--red-bright);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.unsend-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.own-message .reply-button,
+.own-message .unsend-button {
+  align-self: flex-end;
+}

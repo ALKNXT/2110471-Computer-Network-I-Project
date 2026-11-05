@@ -98,7 +98,7 @@ test("Message reactions respect private/group permissions and history", async (t
         [1, 1, 0, 0],
       );
       assert.deepEqual(updates[0][0].reactions, [
-        { socketId: b.id, name: "Bob", emoji: "👍" },
+        { name: "Bob", emoji: "👍" },
       ]);
       await request(b, "message:react", privateReaction);
       await settle();
@@ -199,7 +199,7 @@ test("Message reactions respect private/group permissions and history", async (t
       ).data.messages;
       assert.equal(history[0].messageId, gm.messageId);
       assert.deepEqual(history[0].reactions, [
-        { socketId: b.id, name: "Bob", emoji: "😂" },
+        { name: "Bob", emoji: "😂" },
       ]);
       await request(c, "message:react", groupReaction);
       await settle();

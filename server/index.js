@@ -9,14 +9,17 @@ require("dotenv").config({
   path: path.join(__dirname, "..", ".env"),
 });
 
-const { summarizeMessages } = require("./ai");
+const { summarizeMessages: summarizeMessagesWithGemini } = require("./ai");
 
-function createChatServer() {
+function createChatServer({
+  summarizeMessages = summarizeMessagesWithGemini,
+} = {}) {
   const app = express();
   const httpServer = http.createServer(app);
   const io = new Server(httpServer, { transports: ["websocket"] });
   const state = createState();
   const pendingSummaries = new Set();
+  const groupMessageVersions = new Map();
   const { users, groups, groupMessages, privateMessages } = state;
   const reactionEmojis = ["👍", "❤️", "😂"];
   const privateKey = (a, b) => JSON.stringify([a, b].sort());
@@ -132,6 +135,7 @@ function createChatServer() {
       const groupId = randomUUID();
       groups.set(groupId, { name, members: new Set([socket.id]) });
       groupMessages.set(groupId, []);
+      groupMessageVersions.set(groupId, 0);
       socket.join(`group:${groupId}`);
       ok({ group: state.groupData(groupId), messages: [] });
       broadcast("groups:updated", { groups: state.groupList() });
@@ -169,7 +173,92 @@ function createChatServer() {
       };
       history.push(data);
       if (history.length > 100) history.shift();
+
+      groupMessageVersions.set(
+        payload.groupId,
+        (groupMessageVersions.get(payload.groupId) || 0) + 1,
+      );
       io.to(`group:${payload.groupId}`).emit("group:message", data);
+      ok();
+    });
+
+    handle("message:unsend", (payload, ok, fail) => {
+      let history;
+      let groupRoom;
+
+      if (payload.type === "group") {
+        const group = groups.get(payload.groupId);
+
+        if (!group)
+          return fail("GROUP_NOT_FOUND", "This group does not exist.");
+
+        if (!group.members.has(socket.id))
+          return fail(
+            "FORBIDDEN",
+            "Join this group before unsending messages.",
+          );
+
+        history = groupMessages.get(payload.groupId);
+        groupRoom = `group:${payload.groupId}`;
+      } else if (payload.type === "private") {
+        if (!users.has(payload.to))
+          return fail("USER_OFFLINE", "This user is no longer online.");
+
+        history = privateMessages.get(privateKey(socket.id, payload.to));
+      } else {
+        return fail("INVALID_CONVERSATION", "Unknown conversation type.");
+      }
+
+      const messageIndex = history?.findIndex(
+        (item) => item.messageId === payload.messageId,
+      );
+
+      if (messageIndex == null || messageIndex < 0) {
+        return fail(
+          "MESSAGE_NOT_FOUND",
+          "This message is no longer available.",
+        );
+      }
+
+      const target = history[messageIndex];
+
+      // ตรวจผู้ส่งจากข้อมูลที่ server เก็บไว้ ห้ามเชื่อข้อมูลจาก client
+      if (target.from.socketId !== socket.id) {
+        return fail("FORBIDDEN", "You can only unsend your own messages.");
+      }
+
+      // ลบข้อความต้นฉบับออกจาก history จริง
+      history.splice(messageIndex, 1);
+
+      // ล้าง quote ในข้อความตอบกลับ แต่ไม่ลบข้อความตอบกลับนั้น
+      for (const item of history) {
+        if (item.replyTo?.messageId === target.messageId) {
+          item.replyTo = null;
+        }
+      }
+
+      const update = {
+        type: payload.type,
+        messageId: target.messageId,
+        ...(payload.type === "group"
+          ? { groupId: payload.groupId }
+          : { participantIds: [target.from.socketId, target.to] }),
+      };
+
+      if (payload.type === "group") {
+        groupMessageVersions.set(
+          payload.groupId,
+          (groupMessageVersions.get(payload.groupId) || 0) + 1,
+        );
+
+        io.to(groupRoom).emit("message:unsent", update);
+      } else {
+        // Socket.IO จะส่งให้แต่ละ socket ใน union เพียงครั้งเดียว
+        io.to(target.from.socketId)
+          .to(target.to)
+          .emit("message:unsent", update);
+      }
+
       ok();
     });
 
@@ -280,6 +369,7 @@ function createChatServer() {
       pendingSummaries.add(socket.id);
 
       try {
+        const messageVersion = groupMessageVersions.get(groupId) || 0;
         const summary = await summarizeMessages(messages);
 
         // ตรวจสิทธิ์อีกครั้งหลังรอ AI ป้องกันกรณีสมาชิกหลุดระหว่างประมวลผล
@@ -289,6 +379,13 @@ function createChatServer() {
           !groups.get(groupId)?.members.has(socket.id)
         ) {
           return;
+        }
+
+        if ((groupMessageVersions.get(groupId) || 0) !== messageVersion) {
+          return fail(
+            "SUMMARY_STALE",
+            "Group messages changed while summarizing. Please try again.",
+          );
         }
 
         ack({
